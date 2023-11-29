@@ -22,6 +22,7 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
     private readonly ToolTip NatureTip = new();
     private readonly ToolTip TipPIDInfo = new();
     private readonly ToolTip AffixedTip = new();
+    private readonly ToolTip HeldItemIDTip = new();
 
     public PKMEditor()
     {
@@ -320,6 +321,8 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
         UpdatePKRSInfected(this, EventArgs.Empty);
         UpdatePKRSCured(this, EventArgs.Empty);
         UpdateNatureModification(CB_StatNature, Entity.StatNature);
+        Entity.HeldItem = WinFormsUtil.GetIndex(CB_HeldItem); // Hover tooltip for Held Item value
+        UpdateHeldItemModification(CB_HeldItem, Entity.HeldItem); //
 
         if (HaX)
         {
@@ -1318,6 +1321,12 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
         NatureTip.SetToolTip(cb, text);
     }
 
+    private void UpdateHeldItemModification(ComboBox cb, int helditem) // Hover tooltip for Held Item value
+    {
+        string text = $"{helditem}";
+        HeldItemIDTip.SetToolTip(cb, text);
+    }
+
     private void UpdateIsNicknamed(object sender, EventArgs e)
     {
         if (!FieldsLoaded)
@@ -1618,6 +1627,8 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
             CB_Nature.SelectedValue = Entity.Nature;
             UC_Gender.Gender = Entity.Gender;
             UpdateNatureModification(CB_Nature, Entity.Nature);
+            Entity.HeldItem = WinFormsUtil.GetIndex(CB_HeldItem); // Hover tooltip for Held Item value
+            UpdateHeldItemModification(CB_HeldItem, Entity.HeldItem); //
             FieldsLoaded = true;
         }
     }
@@ -1714,6 +1725,8 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
         }
         else if (sender == CB_HeldItem)
         {
+            Entity.HeldItem = WinFormsUtil.GetIndex(CB_HeldItem);
+            UpdateHeldItemModification(CB_HeldItem, Entity.HeldItem); // Hover tooltip for Item Number
             UpdateLegality();
         }
     }
