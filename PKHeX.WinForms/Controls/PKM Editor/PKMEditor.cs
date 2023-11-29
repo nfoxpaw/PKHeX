@@ -1726,7 +1726,7 @@ public sealed partial class PKMEditor : UserControl, IMainEditor
         else if (sender == CB_HeldItem)
         {
             Entity.HeldItem = WinFormsUtil.GetIndex(CB_HeldItem);
-            UpdateHeldItemModification(CB_HeldItem, Entity.HeldItem); // Hover tooltip for Item Number
+            UpdateHeldItemModification(CB_HeldItem, Entity.HeldItem); // Hover tooltip for Held Item value
             UpdateLegality();
         }
     }
