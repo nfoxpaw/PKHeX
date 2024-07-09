@@ -66,6 +66,28 @@ public static class HiddenPower
         return SixBitType[(int)hp];
     }
 
+    /// <summary>
+    /// Count of unique Hidden Power Types
+    /// </summary>
+    public const int TypeCount = 16;
+
+    /// <summary>
+    /// Gets the Type Name index of the input Hidden Power Type
+    /// </summary>
+    /// <param name="type">Fetched Hidden Power Type</param>
+    /// <param name="index">Type Name index</param>
+    /// <returns>True if the input Hidden Power Type is valid</returns>
+    public static bool TryGetTypeIndex(int type, out byte index)
+    {
+        if ((uint)type >= TypeCount)
+        {
+            index = default;
+            return false;
+        }
+        index = (byte)(type + 1); // Normal type is not a valid Hidden Power type
+        return true;
+    }
+
     private static ReadOnlySpan<byte> SixBitType =>
     [
         // (low-bit mash) * 15 / 63
@@ -92,7 +114,7 @@ public static class HiddenPower
     }
 
     /// <inheritdoc cref="GetTypeGB(ReadOnlySpan{int})"/>
-    public static int GetTypeGB(ushort u16) => ((u16 >> 12) & 0b1100) | ((u16 >> 8) & 0b11);
+    public static int GetTypeGB(ushort u16) => ((u16 >> 10) & 0b1100) | ((u16 >> 8) & 0b11);
 
     /// <summary>
     /// Modifies the provided <see cref="IVs"/> to have the requested <see cref="hiddenPowerType"/> for Generations 1 &amp; 2
@@ -111,7 +133,7 @@ public static class HiddenPower
     public static ushort SetTypeGB(int hiddenPowerType, ushort current)
     {
         // Extract bits from ATK and DEF.
-        var u16 = ((hiddenPowerType & 0b1100) << 12) | ((hiddenPowerType & 0b11) << 8);
+        var u16 = ((hiddenPowerType & 0b1100) << 10) | ((hiddenPowerType & 0b11) << 8);
         return (ushort)((current & 0b1100_1100_1111_1111) | u16);
     }
 
@@ -288,4 +310,13 @@ public static class HiddenPower
         0b111101, // Dragon
         0b111111, // Dark
     ];
+
+    /// <summary>
+    /// Gets the suggested low-bits for the input Hidden Power Type
+    /// </summary>
+    public static byte GetLowBits(int type)
+    {
+        var arr = DefaultLowBits;
+        return (uint)type < arr.Length ? arr[type] : (byte)0;
+    }
 }

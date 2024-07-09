@@ -1,4 +1,3 @@
-using static PKHeX.Core.GameVersion;
 using static PKHeX.Core.Species;
 
 namespace PKHeX.Core;
@@ -8,25 +7,6 @@ namespace PKHeX.Core;
 /// </summary>
 public static class Breeding
 {
-    /// <summary>
-    /// Checks if the game has a Daycare, and returns true if it does.
-    /// </summary>
-    /// <param name="game">Version ID to check for.</param>
-    public static bool CanGameGenerateEggs(GameVersion game) => game switch
-    {
-        R or S or E or FR or LG => true,
-        D or P or Pt or HG or SS => true,
-        B or W or B2 or W2 => true,
-        X or Y or OR or AS => true,
-        SN or MN or US or UM => true,
-        GD or SI or C => true,
-        SW or SH or BD or SP => true,
-        SL or VL => true,
-
-        GS => true,
-        _ => false,
-    };
-
     /// <summary>
     /// Species that have special handling for breeding.
     /// </summary>
@@ -61,7 +41,7 @@ public static class Breeding
     /// <summary>
     /// Species that can yield a different baby species when bred.
     /// </summary>
-    public static bool IsSplitBreedNotBabySpecies(ushort species, int generation)
+    public static bool IsSplitBreedNotBabySpecies(ushort species, byte generation)
     {
         if (generation == 3)
             return IsSplitBreedNotBabySpecies3(species);
@@ -206,6 +186,7 @@ public static class Breeding
         (int)Koraidon or (int)Miraidon => false,
         (int)WalkingWake or (int)IronLeaves => false,
         (int)Okidogi or (int)Munkidori or (int)Fezandipiti or (int)Ogerpon => false,
+        (int)GougingFire or (int)RagingBolt or (int)IronBoulder or (int)IronCrown or (int)Terapagos or (int)Pecharunt => false,
 
         _ => true,
     };

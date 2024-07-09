@@ -7,6 +7,7 @@ namespace PKHeX.Core;
 public sealed class EncounterGenerator8b : IEncounterGenerator
 {
     public static readonly EncounterGenerator8b Instance = new();
+    public bool CanGenerateEggs => true;
 
     public IEnumerable<IEncounterable> GetPossible(PKM pk, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
     {
@@ -17,7 +18,7 @@ public sealed class EncounterGenerator8b : IEncounterGenerator
 
     public IEnumerable<IEncounterable> GetEncounters(PKM pk, EvoCriteria[] chain, LegalInfo info)
     {
-        var game = (GameVersion)pk.Version;
+        var game = pk.Version;
         var iterator = new EncounterEnumerator8b(pk, chain, game);
         foreach (var enc in iterator)
             yield return enc.Encounter;
@@ -30,7 +31,7 @@ public sealed class EncounterGenerator8b : IEncounterGenerator
             yield return enc.Encounter;
     }
 
-    private const int Generation = 8;
+    private const byte Generation = 8;
     private const EntityContext Context = EntityContext.Gen8b;
     private const byte EggLevel = 1;
 

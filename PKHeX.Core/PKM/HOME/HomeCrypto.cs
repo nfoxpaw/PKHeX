@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using static System.Buffers.Binary.BinaryPrimitives;
@@ -78,24 +77,22 @@ public static class HomeCrypto
         var dataSize = ReadUInt16LittleEndian(data[0xE..0x10]);
         var result = new byte[SIZE_1HEADER + dataSize];
         data[..SIZE_1HEADER].CopyTo(result); // header
-        Crypt(data, key, iv, result, dataSize, decrypt);
+
+        var input = data.Slice(SIZE_1HEADER, dataSize);
+        var output = result.AsSpan(SIZE_1HEADER, dataSize);
+        Crypt(input, output, key, iv, decrypt);
 
         return result;
     }
 
-    private static void Crypt(ReadOnlySpan<byte> data, byte[] key, byte[] iv, byte[] result, ushort dataSize, bool decrypt)
+    private static void Crypt(ReadOnlySpan<byte> data, Span<byte> result, byte[] key, byte[] iv, bool decrypt)
     {
-        using var aes = Aes.Create();
-        aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.None; // Handle PKCS7 manually.
-
-        var tmp = data[SIZE_1HEADER..].ToArray();
-        using var ms = new MemoryStream(tmp);
-        using var transform = decrypt ? aes.CreateDecryptor(key, iv) : aes.CreateEncryptor(key, iv);
-        using var cs = new CryptoStream(ms, transform, CryptoStreamMode.Read);
-
-        var size = cs.Read(result, SIZE_1HEADER, dataSize);
-        System.Diagnostics.Debug.Assert(SIZE_1HEADER + size == data.Length);
+        // Handle PKCS7 manually.
+        using var aes = RuntimeCryptographyProvider.Aes.Create(key, CipherMode.CBC, PaddingMode.None, iv);
+        if (decrypt)
+            aes.DecryptCbc(data, result);
+        else
+            aes.EncryptCbc(data, result);
     }
 
     /// <summary>
@@ -157,11 +154,11 @@ public static class HomeCrypto
         // Strings should be \0000 terminated if decrypted.
         // Any non-zero value is a sign of encryption.
         if (ReadUInt16LittleEndian(core[0xB5..]) != 0) // OT
-            return true; // OT_Name final terminator should be 0 if decrypted.
+            return true; // OriginalTrainerName final terminator should be 0 if decrypted.
         if (ReadUInt16LittleEndian(core[0x60..]) != 0) // Nick
             return true; // Nickname final terminator should be 0 if decrypted.
         if (ReadUInt16LittleEndian(core[0x88..]) != 0) // HT
-            return true; // HT_Name final terminator should be 0 if decrypted.
+            return true; // HandlingTrainerName final terminator should be 0 if decrypted.
 
         //// Fall back to checksum.
         //return ReadUInt32LittleEndian(data[0xA..0xE]) == GetChecksum1(data);
@@ -172,11 +169,11 @@ public static class HomeCrypto
     {
         var core = data.Slice(SIZE_1HEADER + 2, SIZE_2CORE);
         if (ReadUInt16LittleEndian(core[0xB1..]) != 0)
-            return true; // OT_Name final terminator should be 0 if decrypted.
+            return true; // OriginalTrainerName final terminator should be 0 if decrypted.
         if (ReadUInt16LittleEndian(core[0x5C..]) != 0)
             return true; // Nickname final terminator should be 0 if decrypted.
         if (ReadUInt16LittleEndian(core[0x84..]) != 0)
-            return true; // HT_Name final terminator should be 0 if decrypted.
+            return true; // HandlingTrainerName final terminator should be 0 if decrypted.
 
         //// Fall back to checksum.
         //return ReadUInt32LittleEndian(data[0xA..0xE]) == GetChecksum1(data);

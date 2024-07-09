@@ -61,6 +61,15 @@ public sealed class FormArgumentVerifier : Verifier
                 > 9_999 => GetInvalid(LFormArgumentHigh),
                 _ => GetValid(LFormArgumentValid),
             },
+            Overqwil => arg switch
+            {
+                > 9_999 => GetInvalid(LFormArgumentHigh),
+                0 when enc.Species == (ushort)Overqwil => GetValid(LFormArgumentValid),
+                < 20 when !data.Info.EvoChainsAllGens.HasVisitedGen9 || pk.CurrentLevel < (pk is IHomeTrack { HasTracker: true } ? 15 : 28) => GetInvalid(LFormArgumentLow),
+                >= 20 when !data.Info.EvoChainsAllGens.HasVisitedPLA || pk.CurrentLevel < 25 => GetInvalid(LFormArgumentLow),
+                _ when pk is IHomeTrack { HasTracker: false } and PA8 { CurrentLevel: < 25 } => GetInvalid(LEvoInvalid),
+                _ => GetValid(LFormArgumentValid),
+            },
             Stantler => arg switch
             {
                 not 0 when pk.IsEgg => GetInvalid(LFormArgumentNotAllowed),
@@ -84,13 +93,13 @@ public sealed class FormArgumentVerifier : Verifier
                 // Without being leveled up at least once, it cannot have a form arg value.
                 >= 999 => GetInvalid(LFormArgumentHigh),
                 0 => GetValid(LFormArgumentValid),
-                _ => pk.CurrentLevel != pk.Met_Level ? GetValid(LFormArgumentValid) : GetInvalid(LFormArgumentNotAllowed),
+                _ => pk.CurrentLevel != pk.MetLevel ? GetValid(LFormArgumentValid) : GetInvalid(LFormArgumentNotAllowed),
             },
             Runerigus   => VerifyFormArgumentRange(enc.Species, Runerigus,   arg,  49, 9999),
             Alcremie    => VerifyFormArgumentRange(enc.Species, Alcremie,    arg,   0, (uint)AlcremieDecoration.Ribbon),
+            Wyrdeer when enc.Species != (int)Wyrdeer && pk.CurrentLevel < 31 => GetInvalid(LEvoInvalid),
             Wyrdeer     => VerifyFormArgumentRange(enc.Species, Wyrdeer,     arg,  20, 9999),
             Basculegion => VerifyFormArgumentRange(enc.Species, Basculegion, arg, 294, 9999),
-            Overqwil    => VerifyFormArgumentRange(enc.Species, Overqwil,    arg,  20, 9999),
             Annihilape  => VerifyFormArgumentRange(enc.Species, Annihilape,  arg,  20, 9999),
             Kingambit   => VerifyFormArgumentRange(enc.Species, Kingambit,   arg,   3, 9999),
             Gholdengo   => VerifyFormArgumentRange(enc.Species, Gholdengo,   arg, 999,  999),
@@ -98,12 +107,12 @@ public sealed class FormArgumentVerifier : Verifier
             {
                 // Starter Legend has '1' when present in party, to differentiate.
                 // Cannot be traded to other games.
-                EncounterStatic9 { StarterBoxLegend: true } x when !(ParseSettings.ActiveTrainer is SAV9SV sv && sv.Version == x.Version) => GetInvalid(LTradeNotAvailable),
+                EncounterStatic9 { StarterBoxLegend: true } x when ParseSettings.ActiveTrainer is { } tr && (tr is not SAV9SV sv || sv.Version != x.Version) => GetInvalid(LTradeNotAvailable),
                 EncounterStatic9 { StarterBoxLegend: true } => arg switch
                 {
-                    < 1 => GetInvalid(LFormArgumentLow),
-                    1 => data.SlotOrigin != SlotOrigin.Party ? GetInvalid(LFormParty) : GetValid(LFormArgumentValid),
-                    > 1 => GetInvalid(LFormArgumentHigh),
+                  < EncounterStatic9.RideLegendFormArg => GetInvalid(LFormArgumentLow),
+                    EncounterStatic9.RideLegendFormArg => !data.IsStoredSlot(StorageSlotType.Ride) ? GetInvalid(LFormParty) : GetValid(LFormArgumentValid),
+                  > EncounterStatic9.RideLegendFormArg => GetInvalid(LFormArgumentHigh),
                 },
                 _ => arg switch
                 {
@@ -119,8 +128,17 @@ public sealed class FormArgumentVerifier : Verifier
     private static bool HasVisitedPLA(LegalityAnalysis data, Species species) => HasVisitedAs(data.Info.EvoChainsAllGens.Gen8a, species);
     private static bool HasVisitedSV(LegalityAnalysis data, Species species) => HasVisitedAs(data.Info.EvoChainsAllGens.Gen9, species);
 
+    /// <summary>
+    /// Check if the <see cref="value"/> is within the range of the inclusive <see cref="min"/> and inclusive <see cref="max"/>.
+    /// </summary>
+    /// <param name="encSpecies">Original species. If evolved, can have a non-zero value.</param>
+    /// <param name="check">Current Species</param>
+    /// <param name="value">Current Form Argument value</param>
+    /// <param name="min">Minimum value allowed</param>
+    /// <param name="max">Maximum value allowed</param>
     private CheckResult VerifyFormArgumentRange(ushort encSpecies, Species check, uint value, uint min, uint max)
     {
+        // If was never the Form Argument accruing species (never evolved from it), then it must be zero.
         if (encSpecies == (ushort)check)
         {
             if (value == 0)
@@ -128,6 +146,7 @@ public sealed class FormArgumentVerifier : Verifier
             return GetInvalid(LFormArgumentNotAllowed);
         }
 
+        // Evolved, must be within the range.
         if (value < min)
             return GetInvalid(LFormArgumentLow);
         if (value > max)

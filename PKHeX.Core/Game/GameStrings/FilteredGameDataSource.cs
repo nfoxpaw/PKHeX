@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -55,23 +56,10 @@ public sealed class FilteredGameDataSource
         };
 
         static IEnumerable<ComboItem> FilterAbove(IReadOnlyList<ComboItem> species, int limit)
-        {
-            foreach (var s in species)
-            {
-                if (s.Value <= limit)
-                    yield return s;
-            }
-        }
+            => species.Where(s => s.Value <= limit);
 
         static IEnumerable<ComboItem> FilterUnavailable<T>(IReadOnlyList<ComboItem> source, T table) where T : IPersonalTable
-        {
-            foreach (var s in source)
-            {
-                var species = s.Value;
-                if (table.IsSpeciesInGame((ushort)species))
-                    yield return s;
-            }
-        }
+            => source.Where(s => table.IsSpeciesInGame((ushort)s.Value));
     }
 
     private static IEnumerable<ComboItem> GetFilteredMoves(IGameValueLimit limit, GameDataSource source, bool HaX = false)
@@ -82,7 +70,8 @@ public sealed class FilteredGameDataSource
         var legal = source.LegalMoveDataSource;
         return limit switch
         {
-            SAV7b or PB7 => legal.Where(s => MoveInfo7b.IsAllowedMoveGG((ushort)s.Value)), // LGPE: Not all moves are available
+            // LGPE: Not all moves are available
+            SAV7b or PB7 => legal.Where(s => MoveInfo7b.IsAllowedMoveGG((ushort)s.Value)),
             _ => legal.Where(m => m.Value <= limit.MaxMoveID),
         };
     }
@@ -101,26 +90,27 @@ public sealed class FilteredGameDataSource
     public readonly IReadOnlyList<ComboItem> G4GroundTiles;
     public readonly IReadOnlyList<ComboItem> ConsoleRegions = GameDataSource.Regions;
 
-    public IReadOnlyList<ComboItem> GetAbilityList(PKM pk)
-    {
-        return GetAbilityList(pk.PersonalInfo);
-    }
+    private const char HiddenAbilitySuffix = 'H';
+    private const char AbilityIndexSuffix = '1';
+
+    public IReadOnlyList<ComboItem> GetAbilityList(PKM pk) => GetAbilityList(pk.PersonalInfo);
 
     public IReadOnlyList<ComboItem> GetAbilityList(IPersonalAbility pi)
     {
         var list = new ComboItem[pi.AbilityCount];
-
-        var alist = Source.Strings.Ability;
-        var suffix = AbilityIndexSuffixes;
-        for (int i = 0; i < list.Length; i++)
-        {
-            var ability = pi.GetAbilityAtIndex(i);
-            var display = alist[ability] + suffix[i];
-            list[i] = new ComboItem(display, ability);
-        }
-
+        LoadAbilityList(pi, list, Source.Strings.abilitylist);
         return list;
     }
 
-    private static readonly string[] AbilityIndexSuffixes = [" (1)", " (2)", " (H)"];
+    private static void LoadAbilityList(IPersonalAbility pi, Span<ComboItem> list, ReadOnlySpan<string> names)
+    {
+        for (int i = 0; i < list.Length; i++)
+        {
+            var value = pi.GetAbilityAtIndex(i);
+            var name = names[value];
+            char suffix = i == 2 ? HiddenAbilitySuffix : (char)(AbilityIndexSuffix + i);
+            var display = $"{name} ({suffix})";
+            list[i] = new ComboItem(display, value);
+        }
+    }
 }

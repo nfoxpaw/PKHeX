@@ -6,6 +6,7 @@ namespace PKHeX.Core;
 public sealed class EncounterGenerator3GC : IEncounterGenerator
 {
     public static readonly EncounterGenerator3GC Instance = new();
+    public bool CanGenerateEggs => false;
 
     public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion __, EncounterTypeGroup groups)
     {
@@ -56,11 +57,11 @@ public sealed class EncounterGenerator3GC : IEncounterGenerator
                 partial ??= z;
         }
 
-        if (partial == null)
-            yield break;
-
-        info.PIDIVMatches = false;
-        yield return partial;
+        if (partial != null)
+        {
+            info.ManualFlag = EncounterYieldFlag.InvalidPIDIV;
+            yield return partial;
+        }
     }
 
     private static IEnumerable<IEncounterable> IterateInner(PKM pk, EvoCriteria[] chain)
