@@ -1,17 +1,18 @@
+using System;
+
 namespace PKHeX.Core;
 
 /// <summary>
 /// Minimal Trainer Information necessary for generating a <see cref="PKM"/>.
 /// </summary>
-public interface ITrainerInfo : ITrainerID32
+public interface ITrainerInfo : ITrainerID32ReadOnly, IVersion, IGeneration, IContext
 {
     string OT { get; }
-    int Gender { get; }
-    int Game { get; }
+    byte Gender { get; }
+    new GameVersion Version { get; }
     int Language { get; }
 
-    int Generation { get; }
-    EntityContext Context { get; }
+    new byte Generation { get; }
 }
 
 /// <summary>
@@ -19,76 +20,44 @@ public interface ITrainerInfo : ITrainerID32
 /// </summary>
 public static class TrainerInfoExtensions
 {
-    /// <summary>
-    /// Copies the <see cref="ITrainerInfo"/> data to the <see cref="PKM"/> object.
-    /// </summary>
-    /// <param name="info">Trainer Information</param>
-    /// <param name="pk">Pokémon to copy to</param>
-    public static void ApplyTo(this ITrainerInfo info, PKM pk)
+    extension(ITrainerInfo info)
     {
-        pk.OT_Name = info.OT;
-        pk.TID16 = info.TID16;
-        pk.SID16 = pk.Format < 3 || pk.VC ? (ushort)0 : info.SID16;
-        pk.OT_Gender = info.Gender;
-        pk.Language = info.Language;
-        pk.Version = info.Game;
-
-        if (pk is not IRegionOrigin tr)
-            return;
-
-        if (info is not IRegionOrigin o)
-            return;
-        o.CopyRegionOrigin(tr);
-    }
-
-    /// <summary>
-    /// Copies the <see cref="ITrainerInfo"/> data to the <see cref="PKM"/> object's Handling Trainer data.
-    /// </summary>
-    /// <param name="sav">Trainer Information</param>
-    /// <param name="pk">Pokémon to copy to</param>
-    /// <param name="force">If true, will overwrite the Handling Trainer Data even if it has not been traded.</param>
-    public static void ApplyHandlingTrainerInfo(this ITrainerInfo sav, PKM pk, bool force = false)
-    {
-        if (pk.Format == sav.Generation && !force)
-            return;
-
-        pk.HT_Name = sav.OT;
-        pk.HT_Gender = sav.Gender;
-        pk.HT_Friendship = pk.OT_Friendship;
-        pk.CurrentHandler = 1;
-        if (pk is IHandlerLanguage h)
-            h.HT_Language = (byte)sav.Language;
-
-        if (pk is PK6 pk6 && sav is IRegionOrigin o)
+        /// <summary>
+        /// Copies the <see cref="ITrainerInfo"/> data to the <see cref="PKM"/> object.
+        /// </summary>
+        /// <param name="pk">Pokémon to copy to</param>
+        public void ApplyTo(PKM pk)
         {
-            pk6.Geo1_Country = o.Country;
-            pk6.Geo1_Region = o.Region;
-            pk6.SetTradeMemoryHT6(true);
+            pk.OriginalTrainerName = info.OT;
+            pk.TID16 = info.TID16;
+            pk.SID16 = pk.Format < 3 || pk.VC ? default : info.SID16;
+            pk.OriginalTrainerGender = info.Gender;
+            pk.Language = info.Language;
+            pk.Version = info.Version;
+
+            if (pk is not IRegionOrigin tr)
+                return;
+
+            if (info is not IRegionOriginReadOnly o)
+                return;
+            o.CopyRegionOrigin(tr);
         }
-        else if (pk is PK8 pk8 && PersonalTable.SWSH.IsPresentInGame(pk.Species, pk.Form))
+
+        /// <summary>
+        /// Checks if the <see cref="ITrainerInfo"/> data matches the <see cref="PKM"/> object's Original Trainer data.
+        /// </summary>
+        /// <param name="pk">Pokémon to compare to</param>
+        /// <returns>True if the data matches.</returns>
+        public bool IsFromTrainer(PKM pk)
         {
-            pk8.SetTradeMemoryHT8();
+            if (pk.IsEgg)
+                return info.IsFromTrainerEgg(pk);
+
+            if (!IsFromTrainerNoVersion(info, pk))
+                return false;
+
+            return IsMatchVersion(info, pk);
         }
-    }
-
-    /// <summary>
-    /// Checks if the <see cref="ITrainerInfo"/> data matches the <see cref="PKM"/> object's Original Trainer data.
-    /// </summary>
-    /// <param name="tr">Trainer Information</param>
-    /// <param name="pk">Pokémon to compare to</param>
-    /// <returns>True if the data matches.</returns>
-    public static bool IsFromTrainer(this ITrainerInfo tr, PKM pk)
-    {
-        if (pk.IsEgg)
-            return tr.IsFromTrainerEgg(pk);
-
-        if (tr.Game == (int)GameVersion.Any)
-            return true;
-
-        if (!IsFromTrainerNoVersion(tr, pk))
-            return false;
-
-        return IsMatchVersion(tr, pk);
     }
 
     /// <summary>
@@ -101,13 +70,17 @@ public static class TrainerInfoExtensions
     {
         if (tr.ID32 != pk.ID32)
             return false;
-        if (tr.OT != pk.OT_Name)
+
+        Span<char> ot = stackalloc char[pk.MaxStringLengthTrainer];
+        int len = pk.LoadString(pk.OriginalTrainerTrash, ot);
+        ot = ot[..len];
+        if (!ot.SequenceEqual(tr.OT))
             return false;
 
         if (pk.Format == 3)
-            return true; // Generation 3 does not check ot gender nor pokemon version
+            return true; // Generation 3 does not check ot gender nor version
 
-        if (tr.Gender != pk.OT_Gender)
+        if (tr.Gender != pk.OriginalTrainerGender)
         {
             if (pk.Format == 2)
                 return pk is ICaughtData2 { CaughtData: 0 };
@@ -127,28 +100,40 @@ public static class TrainerInfoExtensions
             return false;
         if (tr.ID32 != pk.ID32)
             return false;
-        if (tr.Gender != pk.OT_Gender)
+        if (tr.Gender != pk.OriginalTrainerGender)
             return false;
 
-        if (tr.Game != pk.Version)
+        if (tr.Version != pk.Version)
         {
-            // PK9 does not store version for Picnic eggs.
-            if (pk is PK9 { Version: 0 }) { }
-            else { return false; }
+            if (!IsVersionlessState(pk))
+                return false;
         }
 
-        if (tr.OT != pk.OT_Name)
+        Span<char> ot = stackalloc char[pk.MaxStringLengthTrainer];
+        int len = pk.LoadString(pk.OriginalTrainerTrash, ot);
+        ot = ot[..len];
+        if (!ot.SequenceEqual(tr.OT))
             return false;
 
         return true;
     }
 
+    private static bool IsVersionlessState(PKM pk)
+    {
+        // PK9 does not store version for Picnic eggs.
+        if (pk is PK9 { Version: 0 }) // IsEgg is already true for all calls
+            return true;
+        return false;
+    }
+
     private static bool IsMatchVersion(ITrainerInfo tr, PKM pk)
     {
-        if (tr.Game == pk.Version)
+        if (tr.Version == pk.Version)
             return true;
         if (pk.GO_LGPE)
-            return tr.Game is (int)GameVersion.GP or (int)GameVersion.GE;
+            return tr.Version is GameVersion.GP or GameVersion.GE;
+        if (pk.Format <= 2)
+            return true; // No version stored.
         return false;
     }
 }

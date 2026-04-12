@@ -40,13 +40,13 @@ public partial class SAV_Trainer8b : Form
     private void GetComboBoxes()
     {
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
     }
 
     private void GetTextBoxes()
     {
         // Get Data
-        CB_Game.SelectedIndex = Math.Clamp(SAV.Game - (int)GameVersion.BD, 0, 1);
+        CB_Game.SelectedIndex = Math.Clamp((byte)SAV.Version - (byte)GameVersion.BD, 0, 1);
         CB_Gender.SelectedIndex = SAV.Gender;
 
         NUD_BP.Value = SAV.BattleTower.BP;
@@ -56,7 +56,7 @@ public partial class SAV_Trainer8b : Form
         trainerID1.LoadIDValues(SAV, SAV.Generation);
         MT_Money.Text = SAV.Money.ToString();
         CB_Language.SelectedValue = SAV.Language;
-        TB_Rival.Text = SAV.Rival;
+        TB_Rival.Text = SAV.RivalName;
 
         NUD_M.Value = SAV.ZoneID;
         NUD_X.Value = SAV.MyStatus.X;
@@ -103,13 +103,18 @@ public partial class SAV_Trainer8b : Form
 
     private void SaveTrainerInfo()
     {
-        SAV.Game = (byte)(CB_Game.SelectedIndex + (int)GameVersion.BD);
+        SAV.Version = (GameVersion)(CB_Game.SelectedIndex + (int)GameVersion.BD);
         SAV.Gender = (byte)CB_Gender.SelectedIndex;
 
         SAV.Money = Util.ToUInt32(MT_Money.Text);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
-        SAV.OT = TB_OTName.Text;
-        SAV.Rival = TB_Rival.Text;
+
+        // only modify if changed (preserve trash bytes?)
+        if (SAV.OT != TB_OTName.Text)
+            SAV.OT = TB_OTName.Text;
+        if (SAV.RivalName != TB_Rival.Text)
+            SAV.RivalName = TB_Rival.Text;
+
         SAV.BattleTower.BP = (uint)NUD_BP.Value;
 
         // Copy Position
@@ -152,14 +157,15 @@ public partial class SAV_Trainer8b : Form
 
     private void ClickOT(object sender, MouseEventArgs e)
     {
-        TextBox tb = sender as TextBox ?? TB_OTName;
+        if (sender is not TextBox tb)
+            return;
+
         // Special Character Form
         if (ModifierKeys != Keys.Control)
             return;
 
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        var trash = tb == TB_OTName ? SAV.MyStatus.OriginalTrainerTrash : SAV.RivalNameTrash;
+        TrashEditor.Show(tb, SAV, trash);
     }
 
     private void B_Cancel_Click(object sender, EventArgs e)

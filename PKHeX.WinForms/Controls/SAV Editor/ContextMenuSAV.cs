@@ -9,7 +9,12 @@ namespace PKHeX.WinForms.Controls;
 
 public partial class ContextMenuSAV : UserControl
 {
-    public ContextMenuSAV() => InitializeComponent();
+    public ContextMenuSAV()
+    {
+        InitializeComponent();
+        if (Application.IsDarkModeEnabled)
+            WinFormsUtil.InvertToolStripIcons(mnuVSD.Items);
+    }
 
     public SaveDataEditor<PictureBox> Editor { private get; set; } = null!;
     public required SlotChangeManager Manager { get; init; }
@@ -35,7 +40,7 @@ public partial class ContextMenuSAV : UserControl
     {
         var info = GetSenderInfo(sender);
         if (info.IsEmpty())
-        { System.Media.SystemSounds.Asterisk.Play(); return; }
+        { WinFormsUtil.Asterisk(); return; }
 
         Manager.Hover.Stop();
         var pk = Editor.Slots.Get(info.Slot);
@@ -48,6 +53,7 @@ public partial class ContextMenuSAV : UserControl
         if (!editor.EditsComplete)
             return;
         PKM pk = editor.PreparePKM();
+        var preModify = pk.Clone();
 
         var info = GetSenderInfo(sender);
         var sav = info.View.SAV;
@@ -64,6 +70,7 @@ public partial class ContextMenuSAV : UserControl
                 return;
         }
 
+        editor.NotifyWasExported(preModify);
         Manager.Hover.Stop();
         Editor.Slots.Set(info.Slot, pk);
         Manager.SE.UpdateUndoRedo();
@@ -73,7 +80,7 @@ public partial class ContextMenuSAV : UserControl
     {
         var info = GetSenderInfo(sender);
         if (info.IsEmpty())
-        { System.Media.SystemSounds.Asterisk.Play(); return; }
+        { WinFormsUtil.Asterisk(); return; }
 
         var sav = info.View.SAV;
         var pk = sav.BlankPKM;
@@ -112,55 +119,40 @@ public partial class ContextMenuSAV : UserControl
         var info = GetSenderInfo(sender);
         var sav = info.View.SAV;
         var pk = info.Slot.Read(sav);
-        var type = info.Slot is SlotInfoBox ? SlotOrigin.Box : SlotOrigin.Party;
+        var type = info.Slot.Type;
         var la = new LegalityAnalysis(pk, sav.Personal, type);
         RequestEditorLegality?.Invoke(la);
     }
 
     private void MenuOpening(object sender, CancelEventArgs e)
     {
-        var items = ((ContextMenuStrip)sender).Items;
+        var info = GetSenderInfo(sender);
+        bool canView = !info.IsEmpty() || Main.HaX;
+        bool canSet = info.CanWriteTo();
+        bool canDelete = canSet && canView;
+        bool canLegality = (ModifierKeys == Keys.Control || Main.Settings.Display.SlotLegalityAlwaysVisible) && canView && RequestEditorLegality is not null;
 
-        object? ctrl = ((ContextMenuStrip)sender).SourceControl;
-        if (ctrl is null)
-            return;
-        var info = GetSenderInfo(ctrl);
-        bool SlotFull = !info.IsEmpty();
-        bool Editable = info.CanWriteTo();
-        bool legality = ModifierKeys == Keys.Control;
-        ToggleItem(items, mnuSet, Editable);
-        ToggleItem(items, mnuDelete, Editable && SlotFull);
-        ToggleItem(items, mnuLegality, legality && SlotFull && RequestEditorLegality != null);
-        ToggleItem(items, mnuView, SlotFull || !Editable, true);
+        ToggleItem(mnuView, canView);
+        ToggleItem(mnuSet, canSet);
+        ToggleItem(mnuDelete, canDelete);
+        ToggleItem(mnuLegality, canLegality);
 
-        if (items.Count == 0)
+        if (!canView && !canSet && !canDelete)
             e.Cancel = true;
     }
 
     private static SlotViewInfo<PictureBox> GetSenderInfo(object sender)
     {
-        var pb = WinFormsUtil.GetUnderlyingControl<PictureBox>(sender);
-        if (pb == null)
-            throw new InvalidCastException("Unable to find PictureBox");
-        var view = WinFormsUtil.FindFirstControlOfType<ISlotViewer<PictureBox>>(pb);
-        if (view == null)
-            throw new InvalidCastException("Unable to find View Parent");
+        if (!WinFormsUtil.TryGetUnderlying<PictureBox>(sender, out var pb))
+            ArgumentNullException.ThrowIfNull(pb);
+        if (!WinFormsUtil.TryFindFirstControlOfType<ISlotViewer<PictureBox>>(pb, out var view))
+            ArgumentNullException.ThrowIfNull(view);
         var loc = view.GetSlotData(pb);
         return new SlotViewInfo<PictureBox>(loc, view);
     }
 
-    private static void ToggleItem(ToolStripItemCollection items, ToolStripItem item, bool visible, bool first = false)
+    private static void ToggleItem(ToolStripItem item, bool visible)
     {
-        if (visible)
-        {
-            if (first)
-                items.Insert(0, item);
-            else
-                items.Add(item);
-        }
-        else if (items.Contains(item))
-        {
-            items.Remove(item);
-        }
+        item.Visible = visible;
     }
 }

@@ -6,13 +6,13 @@ namespace PKHeX.Core;
 public sealed record EncounterStatic5(GameVersion Version)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<PK5>, IFixedGender
 {
-    public int Generation => 5;
+    public byte Generation => 5;
     public EntityContext Context => EntityContext.Gen5;
-    public bool Roaming { get; init; }
-    int ILocation.Location => Location;
-    int ILocation.EggLocation => EggLocation;
-    public bool IsShiny => false;
-    public bool EggEncounter => EggLocation != 0;
+    public bool IsRoaming { get; init; }
+    ushort ILocation.Location => Location;
+    ushort ILocation.EggLocation => EggLocation;
+    public bool IsShiny => Shiny == Shiny.Always;
+    public bool IsEgg => EggLocation != 0;
     private bool Gift => FixedBall == Ball.Poke;
 
     public Ball FixedBall { get; init; }
@@ -30,7 +30,7 @@ public sealed record EncounterStatic5(GameVersion Version)
     public string LongName => Name;
     public byte LevelMin => Level;
     public byte LevelMax => Level;
-    public bool IsWildCorrelationPID => !Roaming && Shiny == Shiny.Random && Species != (int)Core.Species.Crustle && !Gift && Ability != AbilityPermission.OnlyHidden;
+    public bool IsWildCorrelationPID => !IsRoaming && Shiny == Shiny.Random && !Gift && Ability != AbilityPermission.OnlyHidden;
 
     #region Generating
 
@@ -40,40 +40,40 @@ public sealed record EncounterStatic5(GameVersion Version)
 
     public PK5 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage456((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.B2W2[Species];
         var pk = new PK5
         {
             Species = Species,
             Form = Form,
             CurrentLevel = LevelMin,
-            Met_Location = Location,
-            Met_Level = LevelMin,
+            MetLocation = Location,
+            MetLevel = LevelMin,
             MetDate = EncounterDate.GetDateNDS(),
             Ball = (byte)(FixedBall is Ball.None ? Ball.Poke : FixedBall),
 
             ID32 = tr.ID32,
-            Version = (byte)version,
-            Language = lang,
-            OT_Gender = tr.Gender,
-            OT_Name = tr.OT,
+            Version = version,
+            Language = language,
+            OriginalTrainerGender = tr.Gender,
+            OriginalTrainerName = tr.OT,
 
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
 
-        if (EggEncounter)
+        if (IsEgg)
         {
             // Fake as hatched.
-            pk.Met_Location = Locations.HatchLocation5;
-            pk.Met_Level = EggStateLegality.EggMetLevel;
-            pk.Egg_Location = EggLocation;
+            pk.MetLocation = Locations.HatchLocation5;
+            pk.MetLevel = EggStateLegality.EggMetLevel;
+            pk.EggLocation = EggLocation;
             pk.EggMetDate = pk.MetDate;
         }
 
-        EncounterUtil1.SetEncounterMoves(pk, version, LevelMin);
+        EncounterUtil.SetEncounterMoves(pk, version, LevelMin);
 
         SetPINGA(pk, criteria, pi);
         pk.ResetPartyStats();
@@ -81,44 +81,16 @@ public sealed record EncounterStatic5(GameVersion Version)
         return pk;
     }
 
-    private void SetPINGA(PK5 pk, EncounterCriteria criteria, PersonalInfo5B2W2 pi)
+    private void SetPINGA(PK5 pk, in EncounterCriteria criteria, PersonalInfo5B2W2 pi)
     {
-        int gender = criteria.GetGender(Gender, pi);
-        int nature = (int)criteria.GetNature();
-        var ability = criteria.GetAbilityFromNumber(Ability);
-        var type = Shiny == Shiny.Always ? PIDType.G5MGShiny : PIDType.None;
-        PIDGenerator.SetRandomWildPID5(pk, nature, ability, gender, type);
+        var seed = Util.Rand.Rand64();
+        var gr = pi.Gender;
+        MonochromeRNG.Generate(pk, criteria, gr, seed, IsWildCorrelationPID, Shiny, Ability, Gender);
+
+        pk.Nature = criteria.GetNature();
+        var abilityIndex = Ability == AbilityPermission.OnlyHidden ? 2 : (int)((pk.PID >> 16) & 1);
+        pk.RefreshAbility(abilityIndex);
         criteria.SetRandomIVs(pk);
-        if (Shiny == Shiny.Always)
-            return;
-        if (pk.IsShiny)
-        {
-            if ((Shiny == Shiny.Random && !criteria.Shiny.IsShiny()) || Shiny == Shiny.Never)
-            {
-                var pid = pk.PID;
-                pid ^= 0x1000_0000;
-                var result = (pid & 1) ^ (pid >> 31) ^ (pk.TID16 & 1) ^ (pk.SID16 & 1);
-                if (result == 1)
-                    pid ^= 1;
-                pk.PID = pid;
-            }
-        }
-        else
-        {
-            if (Shiny == Shiny.Random && criteria.Shiny.IsShiny())
-            {
-                var pid = pk.PID;
-                var low = ((pid >> 16) & 1) | (pid & 0xFFFE);
-                uint idx = (uint)pk.TID16 ^ pk.SID16;
-                if ((idx & 1) == 1)
-                    low ^= 1;
-                pid = ((low ^ idx) << 16) | low;
-                var result = (pid & 1) ^ (pid >> 31) ^ (pk.TID16 & 1) ^ (pk.SID16 & 1);
-                if (result == 1)
-                    pid ^= 1;
-                pk.PID = pid;
-            }
-        }
     }
 
     #endregion
@@ -137,7 +109,7 @@ public sealed record EncounterStatic5(GameVersion Version)
             return false;
         if (!IsMatchLocation(pk))
             return false;
-        if (pk.Met_Level != Level)
+        if (pk.MetLevel != Level)
             return false;
         if (Gender != FixedGenderUtil.GenderRandom && pk.Gender != Gender)
             return false;
@@ -148,7 +120,7 @@ public sealed record EncounterStatic5(GameVersion Version)
 
     private bool IsMatchPartial(PKM pk)
     {
-        // BW/2 Jellicent collision with wild surf slot, resolved by duplicating the encounter with any abil
+        // B2/W2 has a static encounter Jellicent with Hidden Ability. Collides with wild surf slots.
         if (Ability == AbilityPermission.OnlyHidden && pk.AbilityNumber != 4 && pk.Format <= 7)
             return true;
         if (EggLocation == Locations.Daycare5 && pk.RelearnMove1 != 0)
@@ -160,30 +132,30 @@ public sealed record EncounterStatic5(GameVersion Version)
 
     private bool IsMatchLocation(PKM pk)
     {
-        var met = pk.Met_Location;
-        if (EggEncounter)
+        var met = pk.MetLocation;
+        if (IsEgg)
             return true;
-        if (!Roaming)
+        if (!IsRoaming)
             return met == Location;
         return IsRoamerMet(met);
     }
 
     private bool IsMatchEggLocation(PKM pk)
     {
-        if (!EggEncounter)
+        if (!IsEgg)
         {
             var expect = pk is PB8 ? Locations.Default8bNone : EggLocation;
-            return pk.Egg_Location == expect;
+            return pk.EggLocation == expect;
         }
 
-        var eggloc = pk.Egg_Location;
+        var eggLoc = pk.EggLocation;
         if (!pk.IsEgg) // hatched
-            return eggloc == EggLocation || eggloc == Locations.LinkTrade5;
+            return eggLoc == EggLocation || eggLoc is (Locations.LinkTrade5 or Locations.LinkTrade5NPC);
 
         // Unhatched:
-        if (eggloc != EggLocation)
+        if (eggLoc != EggLocation)
             return false;
-        if (pk.Met_Location is not (0 or Locations.LinkTrade5))
+        if (pk.MetLocation is not (0 or Locations.LinkTrade5 or Locations.LinkTrade5NPC))
             return false;
         return true;
     }
@@ -193,7 +165,7 @@ public sealed record EncounterStatic5(GameVersion Version)
     // 17,18,29,    // Route 4, 5, 16 Daytime
     // 19,20,21,    // Route 6, 7, 8 Evening
     // 22,23,24,    // Route 9, 10, 11 Night former half
-    private static bool IsRoamerMet(int location)
+    private static bool IsRoamerMet(ushort location)
     {
         if ((uint)location >= 32)
             return false;

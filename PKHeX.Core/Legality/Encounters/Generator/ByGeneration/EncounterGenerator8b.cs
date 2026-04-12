@@ -4,37 +4,40 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace PKHeX.Core;
 
-public sealed class EncounterGenerator8b : IEncounterGenerator
+public sealed class EncounterGenerator8b : IEncounterGenerator, IEncounterGeneratorSWSH
 {
     public static readonly EncounterGenerator8b Instance = new();
+    public bool CanGenerateEggs => true;
 
-    public IEnumerable<IEncounterable> GetPossible(PKM pk, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
+    public IEnumerable<IEncounterable> GetPossible(PKM pk, EvoCriteria[] chain, GameVersion version, EncounterTypeGroup groups)
     {
-        var iterator = new EncounterPossible8b(chain, groups, game, pk);
+        var iterator = new EncounterPossible8b(chain, groups, version, pk);
         foreach (var enc in iterator)
             yield return enc;
     }
 
     public IEnumerable<IEncounterable> GetEncounters(PKM pk, EvoCriteria[] chain, LegalInfo info)
     {
-        var game = (GameVersion)pk.Version;
+        var game = pk.Version;
         var iterator = new EncounterEnumerator8b(pk, chain, game);
         foreach (var enc in iterator)
             yield return enc.Encounter;
     }
 
-    public IEnumerable<IEncounterable> GetEncountersSWSH(PKM pk, EvoCriteria[] chain, GameVersion game)
+    public IEnumerable<IEncounterable> GetEncountersSWSH(PKM pk, EvoCriteria[] chain, GameVersion version)
     {
-        var iterator = new EncounterEnumerator8bSWSH(pk, chain, game);
+        if (pk is not PK8 pk8)
+            yield break;
+        var iterator = new EncounterEnumerator8bSWSH(pk8, chain, version);
         foreach (var enc in iterator)
             yield return enc.Encounter;
     }
 
-    private const int Generation = 8;
+    private const byte Generation = 8;
     private const EntityContext Context = EntityContext.Gen8b;
     private const byte EggLevel = 1;
 
-    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg8b? result)
     {
         result = null;
         var devolved = chain[^1];
@@ -60,7 +63,7 @@ public sealed class EncounterGenerator8b : IEncounterGenerator
         return true;
     }
 
-    public static bool TryGetSplit(EncounterEgg other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetSplit(EncounterEgg8b other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg8b? result)
     {
         result = null;
         // Check for split-breed
@@ -78,11 +81,11 @@ public sealed class EncounterGenerator8b : IEncounterGenerator
         return true;
     }
 
-    private static EncounterEgg CreateEggEncounter(ushort species, byte form, GameVersion version)
+    private static EncounterEgg8b CreateEggEncounter(ushort species, byte form, GameVersion version)
     {
         if (FormInfo.IsBattleOnlyForm(species, form, Generation) || species is (int)Species.Rotom or (int)Species.Castform)
             form = FormInfo.GetOutOfBattleForm(species, form, Generation);
-        return new EncounterEgg(species, form, EggLevel, Generation, version, Context);
+        return new EncounterEgg8b(species, form, version);
     }
 
     private static (ushort Species, byte Form) GetBaby(EvoCriteria lowest)

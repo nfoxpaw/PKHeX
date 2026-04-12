@@ -11,7 +11,7 @@ public static class Overworld8aRNG
     private const int UNSET = -1;
 
     // ReSharper disable once UnusedTupleComponentInReturnValue
-    public static (ulong GroupSeed, ulong SlotSeed) ApplyDetails(PKM pk, EncounterCriteria criteria, in OverworldParam8a para, bool giveAlphaMove)
+    public static (ulong GroupSeed, ulong SlotSeed) ApplyDetails(PA8 pk, in EncounterCriteria criteria, in OverworldParam8a para, bool giveAlphaMove)
     {
         int ctr = 0;
         const int maxAttempts = 50_000;
@@ -36,8 +36,7 @@ public static class Overworld8aRNG
         // Failed, fall back to Unrestricted and just put whatever.
         if (ctr >= maxAttempts)
         {
-            groupSeed = fakeRand.Next();
-            groupRand = new Xoroshiro128Plus(groupSeed);
+            // both group and slot seed values are still valid from last iteration; don't bother repeating work.
             var slotRand = new Xoroshiro128Plus(slotSeed);
             _ = slotRand.Next();
             var entitySeed = slotRand.Next();
@@ -51,7 +50,7 @@ public static class Overworld8aRNG
     }
 
     // ReSharper disable once UnusedTupleComponentInReturnValue
-    public static (ulong EntitySeed, ulong SlotRand) ApplyDetails(PKM pk, in OverworldParam8a para, bool giveAlphaMove, ref Xoroshiro128Plus groupRand)
+    public static (ulong EntitySeed, ulong SlotRand) ApplyDetails(PA8 pk, in OverworldParam8a para, bool giveAlphaMove, ref Xoroshiro128Plus groupRand)
     {
         var slotSeed = groupRand.Next();
         var alphaSeed = groupRand.Next();
@@ -84,7 +83,7 @@ public static class Overworld8aRNG
         return (int)alphaRand.NextInt((uint)count);
     }
 
-    public static bool TryApplyFromSeed(PKM pk, EncounterCriteria criteria, in OverworldParam8a para, ulong seed)
+    public static bool TryApplyFromSeed(PA8 pk, in EncounterCriteria criteria, in OverworldParam8a para, ulong seed)
     {
         var rand = new Xoroshiro128Plus(seed);
 
@@ -130,9 +129,11 @@ public static class Overworld8aRNG
             if (para.Shiny == Shiny.AlwaysStar && type != Shiny.AlwaysStar)
                 return false;
         }
+        if (para.Shiny is Shiny.Random && criteria.IsSpecifiedShiny() && !criteria.IsSatisfiedShiny(GetShinyXor(pid, pk.ID32), 16))
+            return false;
         pk.PID = pid;
 
-        Span<int> ivs = stackalloc[] { UNSET, UNSET, UNSET, UNSET, UNSET, UNSET };
+        Span<int> ivs = [UNSET, UNSET, UNSET, UNSET, UNSET, UNSET];
         const int MAX = 31;
         for (int i = 0; i < para.FlawlessIVs; i++)
         {
@@ -149,47 +150,43 @@ public static class Overworld8aRNG
                 ivs[i] = (int)rand.NextInt(MAX + 1);
         }
 
-        if (!criteria.IsIVsCompatibleSpeedLast(ivs, 8))
+        if (!criteria.IsIVsCompatibleSpeedLast(ivs))
             return false;
 
-        pk.IV_HP = ivs[0];
-        pk.IV_ATK = ivs[1];
-        pk.IV_DEF = ivs[2];
-        pk.IV_SPA = ivs[3];
-        pk.IV_SPD = ivs[4];
-        pk.IV_SPE = ivs[5];
+        pk.IV32 = (uint)ivs[0] |
+                  (uint)(ivs[1] << 05) |
+                  (uint)(ivs[2] << 10) |
+                  (uint)(ivs[5] << 15) | // speed is last in the array, but in the middle of the 32bit value
+                  (uint)(ivs[3] << 20) |
+                  (uint)(ivs[4] << 25);
 
         pk.RefreshAbility((int)rand.NextInt(2));
 
-        int gender = para.GenderRatio switch
+        byte gender = para.GenderRatio switch
         {
             PersonalInfo.RatioMagicGenderless => 2,
             PersonalInfo.RatioMagicFemale => 1,
             PersonalInfo.RatioMagicMale => 0,
-            _ => (int)rand.NextInt(252) + 1 < para.GenderRatio ? 1 : 0,
+            _ => rand.NextInt(252) + 1 < para.GenderRatio ? (byte)1 : (byte)0,
         };
-        if (gender != criteria.Gender && criteria.Gender != FixedGenderUtil.GenderRandom)
+        if (criteria.IsSpecifiedGender() && !criteria.IsSatisfiedGender(gender))
             return false;
         pk.Gender = gender;
 
-        int nature = (int)rand.NextInt(25);
+        var nature = (Nature)rand.NextInt(25);
+        if (criteria.IsSpecifiedNature() && !criteria.IsSatisfiedNature(nature))
+            return false;
         pk.Nature = pk.StatNature = nature;
 
         var (height, weight) = para.IsAlpha
             ? (byte.MaxValue, byte.MaxValue)
-            : ((byte)((int)rand.NextInt(0x81) + (int)rand.NextInt(0x80)),
-               (byte)((int)rand.NextInt(0x81) + (int)rand.NextInt(0x80)));
+            : ((byte)(rand.NextInt(0x81) + rand.NextInt(0x80)),
+               (byte)(rand.NextInt(0x81) + rand.NextInt(0x80)));
 
-        if (pk is IScaledSize s)
-        {
-            s.HeightScalar = height;
-            s.WeightScalar = weight;
-            if (pk is IScaledSizeValue a)
-            {
-                a.ResetHeight();
-                a.ResetWeight();
-            }
-        }
+        pk.HeightScalar = height;
+        pk.WeightScalar = weight;
+        pk.ResetHeight();
+        pk.ResetWeight();
 
         return true;
     }
@@ -201,7 +198,8 @@ public static class Overworld8aRNG
         _ => Shiny.Never,
     };
 
-    public static bool Verify(PKM pk, ulong seed, in OverworldParam8a para)
+    public static bool Verify(PKM pk, ulong seed, in OverworldParam8a para,
+        bool isFixedH = false, bool isFixedW = false)
     {
         var rand = new Xoroshiro128Plus(seed);
         var ec = (uint)rand.NextInt();
@@ -231,7 +229,7 @@ public static class Overworld8aRNG
 
         if (pk.PID != pid)
             return false;
-        Span<int> ivs = stackalloc[] { UNSET, UNSET, UNSET, UNSET, UNSET, UNSET };
+        Span<int> ivs = [UNSET, UNSET, UNSET, UNSET, UNSET, UNSET];
         const int MAX = 31;
         for (int i = 0; i < para.FlawlessIVs; i++)
         {
@@ -261,51 +259,51 @@ public static class Overworld8aRNG
         if (pk.IV_SPE != ivs[5])
             return false;
 
-        int abil = (int)rand.NextInt(2);
-        abil <<= 1; // 1/2/4
+        int ability = (int)rand.NextInt(2);
+        ability <<= 1; // 1/2/4
 
         var current = pk.AbilityNumber;
-        if (abil == 4 && current != 4)
+        if (ability == 4 && current != 4)
             return false;
         // else, for things that were made Hidden Ability, defer to Ability Checks (Ability Patch)
 
-        int gender = para.GenderRatio switch
+        byte gender = para.GenderRatio switch
         {
             PersonalInfo.RatioMagicGenderless => 2,
             PersonalInfo.RatioMagicFemale => 1,
             PersonalInfo.RatioMagicMale => 0,
-            _ => (int)rand.NextInt(252) + 1 < para.GenderRatio ? 1 : 0,
+            _ => rand.NextInt(252) + 1 < para.GenderRatio ? (byte)1 : (byte)0,
         };
         if (pk.Gender != gender)
             return false;
 
-        var nature = (int)rand.NextInt(25);
+        var nature = (Nature)rand.NextInt(25);
         if (pk.Nature != nature)
             return false;
 
         var (height, weight) = para.IsAlpha
             ? (byte.MaxValue, byte.MaxValue)
-            : ((byte)((int)rand.NextInt(0x81) + (int)rand.NextInt(0x80)),
-               (byte)((int)rand.NextInt(0x81) + (int)rand.NextInt(0x80)));
+            : ((byte)(rand.NextInt(0x81) + rand.NextInt(0x80)),
+               (byte)(rand.NextInt(0x81) + rand.NextInt(0x80)));
 
         if (pk is IScaledSize s)
         {
-            if (s.HeightScalar != height)
+            if (!isFixedH && s.HeightScalar != height)
                 return false;
-            if (s.WeightScalar != weight)
+            if (!isFixedW && s.WeightScalar != weight)
                 return false;
         }
 
         return true;
     }
 
-    public static int GetRandomLevel(ulong slotSeed, byte LevelMin, byte LevelMax)
+    public static byte GetRandomLevel(ulong slotSeed, byte min, byte max)
     {
-        var delta = LevelMax - LevelMin;
-        var xoro = new Xoroshiro128Plus(slotSeed);
-        xoro.Next();
-        xoro.Next(); // slot, entitySeed
-        var amp = (int)xoro.NextInt((ulong)delta + 1);
-        return LevelMin + amp;
+        var delta = 1ul + max - min;
+        var rnd = new Xoroshiro128Plus(slotSeed);
+        rnd.Next();
+        rnd.Next(); // slot, entitySeed
+        var amp = (byte)rnd.NextInt(delta);
+        return (byte)(min + amp);
     }
 }

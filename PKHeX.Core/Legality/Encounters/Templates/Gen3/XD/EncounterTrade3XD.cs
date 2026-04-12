@@ -1,17 +1,19 @@
 using System;
+using static PKHeX.Core.RandomCorrelationRating;
 
 namespace PKHeX.Core;
 
 /// <summary>
 /// Generation 3 Static Encounter
 /// </summary>
-public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncounterConvertible<XK3>, IRandomCorrelation, IFixedTrainer, IFixedNickname, IFatefulEncounterReadOnly, IMoveset
+public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncounterConvertible<XK3>,
+    IRandomCorrelation, IFixedTrainer, IFixedNickname, IFatefulEncounterReadOnly, IMoveset, ITrainerID16ReadOnly
 {
-    public int Generation => 3;
+    public byte Generation => 3;
     public EntityContext Context => EntityContext.Gen3;
     public GameVersion Version => GameVersion.XD;
-    int ILocation.EggLocation => 0;
-    int ILocation.Location => Location;
+    ushort ILocation.EggLocation => 0;
+    ushort ILocation.Location => Location;
     public bool IsShiny => false;
     private bool Gift => FixedBall == Ball.Poke;
     public Shiny Shiny => Shiny.Random;
@@ -19,7 +21,7 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
     public bool FatefulEncounter => true;
 
     public bool IsFixedTrainer => true;
-    public bool IsFixedNickname => Nicknames.Length > 0;
+    public bool IsFixedNickname => Nicknames.Length != 0;
     public ushort Species { get; }
     public byte Level { get; }
 
@@ -27,18 +29,18 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
 
     public required byte Location { get; init; }
     public byte Form => 0;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public required Moveset Moves { get; init; }
     public required ushort TID16 { get; init; }
     // SID: Based on player ID
 
-    private readonly string[] TrainerNames;
+    private readonly ReadOnlyMemory<string> TrainerNames;
 
-    private readonly string[] Nicknames;
+    private readonly ReadOnlyMemory<string> Nicknames;
 
-    public EncounterTrade3XD(ushort species, byte level, string[] trainer) : this(species, level, trainer, Array.Empty<string>()) { }
+    public EncounterTrade3XD(ushort species, byte level, ReadOnlyMemory<string> trainer) : this(species, level, trainer, ReadOnlyMemory<string>.Empty) { }
 
-    public EncounterTrade3XD(ushort species, byte level, string[] trainer, string[] nicknames)
+    public EncounterTrade3XD(ushort species, byte level, ReadOnlyMemory<string> trainer, ReadOnlyMemory<string> nicknames)
     {
         Species = species;
         Level = level;
@@ -64,16 +66,16 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Met_Location = Location,
-            Met_Level = Level,
-            Version = (byte)GameVersion.CXD,
+            MetLocation = Location,
+            MetLevel = Level,
+            Version = GameVersion.CXD,
             Ball = (byte)Ball.Poke,
             FatefulEncounter = FatefulEncounter,
             Language = lang,
-            OT_Name = TrainerNames[lang],
-            OT_Gender = 0,
+            OriginalTrainerName = TrainerNames.Span[lang],
+            OriginalTrainerGender = 0,
             TID16 = TID16,
             SID16 = tr.SID16,
             Nickname = IsFixedNickname ? GetNickname(lang) : SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
@@ -83,35 +85,19 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
         if (Moves.HasMoves)
             pk.SetMoves(Moves);
         else
-            EncounterUtil1.SetEncounterMoves(pk, Version, Level);
+            EncounterUtil.SetEncounterMoves(pk, Version, Level);
 
         pk.ResetPartyStats();
         return pk;
     }
 
-    private int GetTemplateLanguage(ITrainerInfo tr) => (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
+    private int GetTemplateLanguage(ITrainerInfo tr) => (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
 
-    private void SetPINGA(XK3 pk, EncounterCriteria criteria, PersonalInfo3 pi)
+    private static void SetPINGA(XK3 pk, in EncounterCriteria criteria, PersonalInfo3 pi)
     {
-        int gender = criteria.GetGender(pi);
-        int nature = (int)criteria.GetNature();
-        var ability = criteria.GetAbilityFromNumber(Ability);
-        if (Species == (int)Core.Species.Unown)
-        {
-            do
-            {
-                PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, PIDType.Method_1_Unown);
-                ability ^= 1; // some nature-forms cannot have a certain PID-ability set, so just flip it as Unown doesn't have dual abilities.
-            } while (pk.Form != Form);
-        }
-        else
-        {
-            const PIDType type = PIDType.CXD;
-            do
-            {
-                PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, type);
-            } while (Shiny == Shiny.Never && pk.IsShiny);
-        }
+        if (criteria.IsSpecifiedIVsAll() && MethodCXD.SetFromIVs(pk, criteria, pi, noShiny: false))
+            return;
+        MethodCXD.SetRandom(pk, criteria, pi, noShiny: false, Util.Rand32());
     }
     #endregion
 
@@ -144,14 +130,14 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
             return true;
 
         var expect = pk is PB8 ? Locations.Default8bNone : 0;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private bool IsMatchLevel(PKM pk, EvoCriteria evo)
     {
         if (pk.Format != 3) // Met Level lost on PK3=>PK4
             return evo.LevelMax >= Level;
-        return pk.Met_Level == Level;
+        return pk.MetLevel == Level;
     }
 
     private bool IsMatchLocation(PKM pk)
@@ -159,7 +145,7 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
         if (pk.Format != 3)
             return true; // transfer location verified later
 
-        var met = pk.Met_Location;
+        var met = pk.MetLocation;
         return Location == met;
     }
 
@@ -171,16 +157,39 @@ public sealed record EncounterTrade3XD : IEncounterable, IEncounterMatch, IEncou
     }
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk) => val is PIDType.CXD;
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk) => type is PIDType.CXD ? Match : Mismatch;
     public PIDType GetSuggestedCorrelation() => PIDType.CXD;
-    public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language) => (uint)language < TrainerNames.Length && trainer.SequenceEqual(TrainerNames[language]);
+
+    public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language)
+    {
+        if ((uint)language >= TrainerNames.Length)
+            return false;
+        if (language == 0 || (uint)language >= TrainerNames.Length)
+            return false;
+        var name = TrainerNames.Span[language];
+        if (pk.Context == EntityContext.Gen3)
+            return trainer.SequenceEqual(name);
+        if (IsSpanishDuking(language)) // Gen4+
+            return trainer is Encounters3Colo.TrainerNameDukingSpanish4;
+        return trainer.SequenceEqual(name);
+    }
+
+    private bool IsSpanishDuking(int language) => language is (int)LanguageID.Spanish && Species is not (int)Core.Species.Elekid;
 
     public bool IsNicknameMatch(PKM pk, ReadOnlySpan<char> nickname, int language)
     {
         if (!IsFixedNickname)
             return true;
-        return nickname.SequenceEqual(GetNickname(language));
+        if (language == 0 || (uint)language >= Nicknames.Length)
+            return false;
+        var name = Nicknames.Span[language];
+        if (pk.Context == EntityContext.Gen3)
+            return nickname.SequenceEqual(name);
+
+        Span<char> tmp = stackalloc char[name.Length];
+        StringConverter345.TransferGlyphs34(name, language, tmp);
+        return nickname.SequenceEqual(tmp);
     }
 
-    public string GetNickname(int language) => (uint)language < Nicknames.Length ? Nicknames[language] : Nicknames[0];
+    public string GetNickname(int language) => Nicknames.Span[(uint)language < Nicknames.Length ? language : 0];
 }

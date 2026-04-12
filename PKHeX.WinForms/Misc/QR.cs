@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using PKHeX.Core;
@@ -11,14 +11,15 @@ public partial class QR : Form
 {
     private readonly PKM? Entity;
     private readonly Image icon;
-    private Image qr;
+    private Bitmap qr;
 
     private readonly string[] Lines;
     private string extraText = string.Empty;
 
-    public QR(Image qr, Image icon, params string[] lines)
+    public QR(Bitmap qr, Image icon, params string[] lines)
     {
         InitializeComponent();
+        WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
         this.qr = qr;
         this.icon = icon;
         Lines = lines;
@@ -27,9 +28,10 @@ public partial class QR : Form
         ResizeWindow();
     }
 
-    public QR(Image qr, Image icon, PKM pk, params string[] lines)
+    public QR(Bitmap qr, Image icon, PKM pk, params string[] lines)
     {
         InitializeComponent();
+        WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
         this.qr = qr;
         this.icon = icon;
         Lines = lines;
@@ -43,17 +45,20 @@ public partial class QR : Form
 
         RefreshImage();
         ResizeWindow();
-        splitContainer1.SplitterDistance = 34;
     }
 
     private void ResizeWindow()
     {
         var img = PB_QR.Image;
-        splitContainer1.Height = splitContainer1.Panel1.Height + img.Height;
-        splitContainer1.Width = img.Width;
+        if (img is null)
+            return;
+
+        var p2 = splitContainer1.Panel2;
+        Height += img.Height - p2.Height;
+        Width += img.Width - p2.Width;
     }
 
-    private Image ReloadQRData(PK7 pk7)
+    private Bitmap ReloadQRData(PK7 pk7)
     {
         var box = (int)NUD_Box.Value - 1;
         var slot = (int)NUD_Slot.Value - 1;
@@ -66,16 +71,21 @@ public partial class QR : Form
     {
         SuspendLayout();
         ResumeLayout();
-        Font font = !Main.Unicode ? Font : FontUtil.GetPKXFont(8.25f);
-        var img = QRImageUtil.GetQRImageExtended(font, qr, icon, Math.Max(qr.Width, 370), qr.Height + 50, Lines, extraText);
+        var font = !Main.Unicode ? Font : FontUtil.GetPKXFont(8.25f);
+
+        var width = Math.Max(qr.Width, 370);
+        var height = qr.Height + 50;
+        var img = QRImageUtil.GetQRImageExtended(font, qr, icon, width, height, Lines, extraText);
         PB_QR.Image = img;
     }
 
     private void PB_QR_Click(object sender, EventArgs e)
     {
+        if (PB_QR.Image is not { } img)
+            return;
         if (DialogResult.Yes != WinFormsUtil.Prompt(MessageBoxButtons.YesNo, MsgQRClipboardImage))
             return;
-        try { Clipboard.SetImage(PB_QR.Image); }
+        try { Clipboard.SetImage(img); }
         // Clipboard can be locked periodically, just notify on failure.
         catch { WinFormsUtil.Alert(MsgQRClipboardFail); }
     }

@@ -2,7 +2,7 @@ using System;
 
 namespace PKHeX.Core;
 
-internal sealed class SAV2Offsets
+public sealed class SAV2Offsets
 {
     public SAV2Offsets(SAV2 sav)
     {
@@ -66,6 +66,8 @@ internal sealed class SAV2Offsets
 
         switch (version)
         {
+            case GameVersion.GD:
+            case GameVersion.SI:
             case GameVersion.GS:
                 TimePlayed = 0x2053;
                 Palette = 0x206B;
@@ -134,6 +136,8 @@ internal sealed class SAV2Offsets
 
         switch (version)
         {
+            case GameVersion.GD:
+            case GameVersion.SI:
             case GameVersion.GS:
                 RTCFlags = 0x1000;
 

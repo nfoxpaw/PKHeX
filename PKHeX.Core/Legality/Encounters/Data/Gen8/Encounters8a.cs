@@ -13,7 +13,7 @@ internal static class Encounters8a
     private const byte U = 128; // Middle Height - Unown
 
     internal static readonly EncounterStatic8a[] StaticLA =
-    {
+    [
         // Gifts
         new(722,000,05,M,M) { Location = 006,                      FixedBall = Ball.LAPoke,   Method = Fixed }, // Rowlet
         new(155,000,05,M,M) { Location = 006,                      FixedBall = Ball.LAPoke,   Method = Fixed }, // Cyndaquil
@@ -76,16 +76,19 @@ internal static class Encounters8a
 
         // Future updates will handle crossovers better.
         new(201,002,25,U) { Location = 010, Method = Fixed }, // Unown C (Coronet Highlands)
+        new(201,006,25,U) { Location = 007, Method = Fixed }, // Unown G (Obsidian Fieldlands)
+        new(201,013,25,U) { Location = 129, Method = Fixed }, // Unown N (Sand's Reach)
+        new(201,014,25,U) { Location = 011, Method = Fixed }, // Unown O (Alabaster Icelands)
         new(201,017,25,U) { Location = 009, Method = Fixed }, // Unown R (Cobalt Coastlands)
+        new(201,023,25,U) { Location = 007, Method = Fixed }, // Unown X (Obsidian Fieldlands)
         new(201,026,25,U) { Location = 099, Method = Fixed }, // Unown ! (Arena’s Approach)
         new(201,026,25,U) { Location = 141, Method = Fixed }, // Unown ! (Icepeak Arena)
-        new(201,023,25,U) { Location = 007, Method = Fixed }, // Unown X
-        new(201,024,25,U) { Location = 097, Method = Fixed }, // Unown Y
-        new(201,006,25,U) { Location = 007, Method = Fixed }, // Unown G
 
-        new(642,000,70,M,M) { Location = 059, FlawlessIVCount = 3,                 Moves = new(326,242,087,847) }, // Thundurus (Lunker’s Lair)
-        new(642,000,70,M,M) { Location = 129, FlawlessIVCount = 3,                 Moves = new(326,242,087,847) }, // Thundurus (Sand’s Reach)
-        new(488,000,70,M,M) { Location = 010, FlawlessIVCount = 3,                 Moves = new(427,094,585,849) }, // Cresselia (Coronet Highlands)
+        new(642,000,70,M,M) { Location = 059, FlawlessIVCount = 3,                          Moves = new(326,242,087,847) }, // Thundurus (Lunker’s Lair)
+        new(642,000,70,M,M) { Location = 129, FlawlessIVCount = 3,                          Moves = new(326,242,087,847) }, // Thundurus (Sand’s Reach)
+        new(905,000,70,M,M) { Location = 008, FlawlessIVCount = 3,                          Moves = new(326,242,585,831) }, // Enamorus (Crimson Mirelands)
+        new(905,000,70,M,M) { Location = 039, FlawlessIVCount = 3,                          Moves = new(326,242,585,831) }, // Enamorus (Bolderoll Slope)
+        new(488,000,70,M,M) { Location = 010, FlawlessIVCount = 3,                          Moves = new(427,094,585,849) }, // Cresselia (Coronet Highlands)
         new(491,000,70,M,M) { Location = 074, FlawlessIVCount = 3, FatefulEncounter = true, Moves = new(506,399,094,464) }, // Darkrai (Lonely Spring)
 
         // Static Encounters
@@ -107,5 +110,5 @@ internal static class Encounters8a
         new(571,001,58,M,M) { Location = 111, Method = Fixed, IsAlpha = true,                                  Moves = new(555,421,841,417) }, // zoroark01: Zoroark-1
         new(706,001,58,M,M) { Location = 104, Method = Fixed, IsAlpha = true,                                  Moves = new(231,406,842,056) }, // numelgon01: Goodra-1
         new(904,000,58,M,M) { Location = 105, Method = Fixed, IsAlpha = true,                                  Moves = new(301,398,401,038) }, // harysen01: Overqwil
-    };
+    ];
 }

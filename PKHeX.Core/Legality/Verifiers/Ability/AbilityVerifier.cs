@@ -1,5 +1,5 @@
 using System;
-using static PKHeX.Core.LegalityCheckStrings;
+using static PKHeX.Core.LegalityCheckResultCode;
 
 namespace PKHeX.Core;
 
@@ -16,8 +16,8 @@ public sealed class AbilityVerifier : Verifier
         data.AddLine(result);
     }
 
-    private CheckResult VALID => GetValid(LAbilityFlag);
-    private CheckResult INVALID => GetInvalid(LAbilityMismatch);
+    private CheckResult VALID => GetValid(AbilityFlag);
+    private CheckResult INVALID => GetInvalid(AbilityMismatch);
 
     private enum AbilityState : byte
     {
@@ -28,15 +28,18 @@ public sealed class AbilityVerifier : Verifier
     private CheckResult VerifyAbility(LegalityAnalysis data)
     {
         var pk = data.Entity;
+        if (pk is PA9 pa9)
+            return VerifyBirthAbility(data, pa9);
+
         var abilities = (IPersonalAbility12)data.PersonalInfo;
 
         // Check ability is possible (within bounds)
         int ability = pk.Ability;
         int abilIndex = abilities.GetIndexOfAbility(ability);
         if (abilIndex < 0)
-            return GetInvalid(LAbilityUnexpected);
+            return GetInvalid(AbilityUnexpected);
 
-        int format = pk.Format;
+        byte format = pk.Format;
         if (format >= 6)
         {
             var bitNum = pk.AbilityNumber;
@@ -49,18 +52,18 @@ public sealed class AbilityVerifier : Verifier
                 return INVALID;
 
             // Check AbilityNumber for transfers without unique abilities
-            int gen = data.Info.Generation;
+            var gen = data.Info.Generation;
             if (gen is 3 or 4 or 5 && bitNum != 4)
             {
                 // To determine AbilityNumber [PK5->PK6], check if the first ability in Personal matches the ability.
                 // It is not possible to flip it to the other index as capsule requires unique abilities.
-                if (abilities.GetIsAbility12Same() && bitNum != 1)
+                if (abilities.IsAbility12Same && bitNum != 1)
                 {
                     // Check if any pre-evolution could have it flipped.
-                    var evos = data.Info.EvoChainsAllGens.Gen6;
-                    var pt = GameData.GetPersonal(pk.Context.GetSingleGameVersion());
-                    if (!GetWasDual(evos, pt, pk))
+                    var evos = data.Info.EvoChainsAllGens;
+                    if (!AbilityChangeRules.IsAbilityCapsulePossible(evos))
                         return INVALID;
+                    return GetValid(AbilityCapsuleUsed);
                 }
             }
         }
@@ -73,13 +76,13 @@ public sealed class AbilityVerifier : Verifier
 
             if (pk.AbilityNumber == 4)
             {
-                if (AbilityChangeRules.IsAbilityPatchPossible(data.Info.EvoChainsAllGens, pk.Context, enc.Context))
-                    return GetValid(LAbilityPatchUsed);
+                if (AbilityChangeRules.IsAbilityPatchPossible(data.Info.EvoChainsAllGens))
+                    return GetValid(AbilityPatchUsed);
             }
             else if (enc.Ability == AbilityPermission.OnlyHidden)
             {
-                if (AbilityChangeRules.IsAbilityPatchRevertPossible(data.Info.EvoChainsAllGens, pk.AbilityNumber, pk.Context, enc.Context))
-                    return GetValid(LAbilityPatchRevertUsed);
+                if (AbilityChangeRules.IsAbilityPatchRevertPossible(data.Info.EvoChainsAllGens, pk.AbilityNumber))
+                    return GetValid(AbilityPatchRevertUsed);
             }
         }
 
@@ -94,21 +97,6 @@ public sealed class AbilityVerifier : Verifier
 
     public static bool IsValidAbilityBits(int bitNum) => bitNum is 1 or 2 or 4;
 
-    private static bool GetWasDual(ReadOnlySpan<EvoCriteria> evos, IPersonalTable pt, ISpeciesForm pk)
-    {
-        foreach (var evo in evos)
-        {
-            if (evo.Species == pk.Species)
-                continue;
-
-            var abilities = (IPersonalAbility12)pt.GetFormEntry(evo.Species, evo.Form);
-            if (CanAbilityCapsule(6, abilities))
-                return true;
-        }
-
-        return false;
-    }
-
     private CheckResult VerifyAbility(LegalityAnalysis data, IPersonalAbility12 abilities, int abilIndex)
     {
         var enc = data.EncounterMatch;
@@ -116,7 +104,7 @@ public sealed class AbilityVerifier : Verifier
         if (eabil >= 0)
         {
             if ((data.Entity.AbilityNumber == 4) != (eabil == AbilityPermission.OnlyHidden))
-                return GetInvalid(LAbilityHiddenFail);
+                return GetInvalid(AbilityHiddenFail);
             if (eabil > 0)
                 return VerifyFixedAbility(data, abilities, AbilityState.CanMismatch, eabil, abilIndex);
         }
@@ -133,24 +121,24 @@ public sealed class AbilityVerifier : Verifier
         };
     }
 
-    private CheckResult VerifyAbility345(LegalityAnalysis data, IEncounterable enc, IPersonalAbility12 abilities, int abilIndex)
+    private CheckResult VerifyAbility345(LegalityAnalysis data, IEncounterTemplate enc, IPersonalAbility12 abilities, int abilIndex)
     {
         var pk = data.Entity;
-        int format = pk.Format;
+        byte format = pk.Format;
         var state = AbilityState.MustMatch;
-        if (format is (3 or 4 or 5) && !abilities.GetIsAbility12Same()) // 3-4/5 and have 2 distinct abilities now
+        if (format is (3 or 4 or 5) && !abilities.IsAbility12Same) // 3-4/5 and have 2 distinct abilities now
             state = VerifyAbilityPreCapsule(data, abilities);
 
         var encounterAbility = enc.Ability;
         if (encounterAbility >= 0)
         {
             if ((pk.AbilityNumber == 4) != (encounterAbility == AbilityPermission.OnlyHidden))
-                return GetInvalid(LAbilityHiddenFail);
+                return GetInvalid(AbilityHiddenFail);
             if (encounterAbility > 0)
                 return VerifyFixedAbility(data, abilities, state, encounterAbility, abilIndex);
         }
 
-        int gen = enc.Generation;
+        var gen = enc.Generation;
         if (gen == 5)
             return VerifyAbility5(data, enc, abilities);
 
@@ -164,14 +152,14 @@ public sealed class AbilityVerifier : Verifier
         if (enc.Generation >= 6)
         {
             if (IsAbilityCapsuleModified(pk, encounterAbility, data.Info.EvoChainsAllGens, enc.Context))
-                return GetValid(LAbilityCapsuleUsed);
+                return GetValid(AbilityCapsuleUsed);
             if (pk.AbilityNumber != 1 << encounterAbility.GetSingleValue())
                 return INVALID;
             return VALID;
         }
 
         if ((pk.AbilityNumber == 4) != (encounterAbility == AbilityPermission.OnlyHidden))
-            return GetInvalid(LAbilityHiddenFail);
+            return GetInvalid(AbilityHiddenFail);
 
         bool hasEvolved = enc.Species != pk.Species;
         if (hasEvolved && state != AbilityState.CanMismatch)
@@ -203,7 +191,7 @@ public sealed class AbilityVerifier : Verifier
             return CheckMatch(pk, abilities, enc.Generation, AbilityState.MustMatch, enc);
 
         if (IsAbilityCapsuleModified(pk, encounterAbility, data.Info.EvoChainsAllGens, enc.Context))
-            return GetValid(LAbilityCapsuleUsed);
+            return GetValid(AbilityCapsuleUsed);
 
         return INVALID;
     }
@@ -218,10 +206,10 @@ public sealed class AbilityVerifier : Verifier
         // Gen3 origin... a lot of edge cases to check.
         var pk = data.Entity;
         var format = pk.Format;
-        // CXD pokemon can have any ability without matching PID
+        // CXD Pokémon can have any ability without matching PID
         if (format == 3)
         {
-            if (pk.Version == (int)GameVersion.CXD)
+            if (pk.Version == GameVersion.CXD)
                 return AbilityState.CanMismatch;
             return AbilityState.MustMatch;
         }
@@ -235,7 +223,7 @@ public sealed class AbilityVerifier : Verifier
         if (g3.Length == 0)
             return AbilityState.MustMatch;
 
-        // Fall through when gen3 pk transferred to gen4/5
+        // Fall through when Gen3 pk transferred to Gen4/5
         var maxGen3Species = g3[0].Species;
         return VerifyAbilityGen3Transfer(data, abilities, maxGen3Species);
     }
@@ -245,7 +233,7 @@ public sealed class AbilityVerifier : Verifier
         var pk = data.Entity;
         var pers = PersonalTable.E[maxGen3Species];
         if (pers.Ability1 != pers.Ability2) // Excluding Colosseum/XD, a Gen3 pk must match PID if it has 2 unique abilities
-            return pk.Version == (int) GameVersion.CXD ? AbilityState.CanMismatch : AbilityState.MustMatch;
+            return pk.Version == GameVersion.CXD ? AbilityState.CanMismatch : AbilityState.MustMatch;
 
         if (pk.Species != maxGen3Species) // it has evolved in either gen 4 or gen 5; the ability must match PID
             return AbilityState.MustMatch;
@@ -264,7 +252,7 @@ public sealed class AbilityVerifier : Verifier
         // If we reach here, it has not evolved in Gen4/5 games or has an invalid ability.
         // The ability does not need to match the PIDAbility, but only Gen3 ability is allowed.
         if (pk.Ability != pers.Ability1) // Not evolved in Gen4/5, but doesn't have Gen3 only ability
-            data.AddLine(GetInvalid(LAbilityMismatch3)); // probably bad to do this here
+            data.AddLine(GetInvalid(AbilityMismatch3)); // probably bad to do this here
 
         return AbilityState.CanMismatch;
     }
@@ -276,38 +264,35 @@ public sealed class AbilityVerifier : Verifier
 
         var pk = data.Entity;
         if (g is PGT) // Ranger Manaphy
-            return (pk.Format >= 6 ? (pk.AbilityNumber == 1) : (pk.AbilityNumber < 4)) ? VALID : GetInvalid(LAbilityMismatchGift);
+            return (pk.Format >= 6 ? (pk.AbilityNumber == 1) : (pk.AbilityNumber < 4)) ? VALID : GetInvalid(AbilityMismatchGift);
 
-        var cardType = g.AbilityType;
-        if (cardType == 4) // 1/2/H
+        var permit = g.Ability;
+        if (permit == AbilityPermission.Any12H)
             return VALID;
         int abilNumber = pk.AbilityNumber;
-        if (cardType == 3) // 1/2
-            return abilNumber == 4 ? GetInvalid(LAbilityMismatchGift) : VALID;
+        if (permit == AbilityPermission.Any12)
+            return abilNumber == 4 ? GetInvalid(AbilityMismatchGift) : VALID;
 
         // Only remaining matches are fixed index abilities
-        int cardAbilIndex = 1 << cardType;
+        int cardAbilIndex = (int)permit;
         if (abilNumber == cardAbilIndex)
             return VALID;
 
         // Can still match if the ability was changed via ability capsule...
         // However, it can't change to/from Hidden Abilities.
-        if (abilNumber == 4 || cardType == 2)
-            return GetInvalid(LAbilityHiddenFail);
+        if (abilNumber == 4 || permit == AbilityPermission.OnlyHidden)
+            return GetInvalid(AbilityHiddenFail);
 
         // Ability can be flipped 0/1 if Ability Capsule is available, is not Hidden Ability, and Abilities are different.
         if (pk.Format >= 6)
         {
-            if (CanAbilityCapsule(6, abilities))
-                return GetValid(LAbilityCapsuleUsed);
-
             // Maybe was evolved after using ability capsule.
-            var evos = data.Info.EvoChainsAllGens.Get(pk.Context);
-            if (GetWasDual(evos, PKX.Personal, pk))
-                return GetValid(LAbilityCapsuleUsed);
+            var evos = data.Info.EvoChainsAllGens;
+            if (AbilityChangeRules.IsAbilityCapsulePossible(evos))
+                return GetValid(AbilityCapsuleUsed);
         }
 
-        return pk.Format < 6 ? GetInvalid(LAbilityMismatchPID) : INVALID;
+        return pk.Format < 6 ? GetInvalid(AbilityMismatchPID) : INVALID;
     }
 
     private CheckResult VerifyAbilityPCD(LegalityAnalysis data, IPersonalAbility12 abilities, PCD pcd)
@@ -324,7 +309,7 @@ public sealed class AbilityVerifier : Verifier
                 return CheckMatch(pk, abilities, 4, AbilityState.MustMatch, pcd); // evolved, must match
             }
             if (pk.AbilityNumber < 4) // Ability Capsule can change between 1/2
-                return GetValid(LAbilityCapsuleUsed);
+                return GetValid(AbilityCapsuleUsed);
         }
 
         if (pcd.Species != pk.Species)
@@ -338,10 +323,10 @@ public sealed class AbilityVerifier : Verifier
     {
         var pk = data.Entity;
 
-        // Eggs and Encounter Slots are not yet checked for Hidden Ability potential.
+        // Eggs and Encounter Slots have not yet checked for Hidden Ability potential.
         return enc switch
         {
-            EncounterEgg e when pk.AbilityNumber == 4 && !AbilityBreedLegality.IsHiddenPossible5(e.Species) => GetInvalid(LAbilityHiddenUnavailable),
+            EncounterEgg5 egg when pk.AbilityNumber == 4 && !egg.Ability.CanBeHidden() => GetInvalid(AbilityHiddenUnavailable),
             _ => CheckMatch(data.Entity, abilities, 5, pk.Format == 5 ? AbilityState.MustMatch : AbilityState.CanMismatch, enc),
         };
     }
@@ -354,7 +339,7 @@ public sealed class AbilityVerifier : Verifier
 
         return enc switch
         {
-            EncounterEgg egg when !AbilityBreedLegality.IsHiddenPossible6(egg.Species, egg.Form) => GetInvalid(LAbilityHiddenUnavailable),
+            EncounterEgg6 egg when !egg.Ability.CanBeHidden() => GetInvalid(AbilityHiddenUnavailable),
             _ => VALID,
         };
     }
@@ -367,12 +352,12 @@ public sealed class AbilityVerifier : Verifier
 
         return enc switch
         {
-            EncounterEgg egg when !AbilityBreedLegality.IsHiddenPossible7(egg.Species, egg.Form) => GetInvalid(LAbilityHiddenUnavailable),
+            EncounterEgg7 egg when !egg.Ability.CanBeHidden() => GetInvalid(AbilityHiddenUnavailable),
             _ => VALID,
         };
     }
 
-    private CheckResult VerifyAbility8BDSP(LegalityAnalysis data, IEncounterable enc)
+    private CheckResult VerifyAbility8BDSP(LegalityAnalysis data, IEncounterTemplate enc)
     {
         var pk = data.Entity;
         if (pk.AbilityNumber != 4)
@@ -380,7 +365,7 @@ public sealed class AbilityVerifier : Verifier
 
         return enc switch
         {
-            EncounterEgg egg when !AbilityBreedLegality.IsHiddenPossibleHOME(egg.Species) => GetInvalid(LAbilityHiddenUnavailable),
+            EncounterEgg8b egg when !egg.Ability.CanBeHidden() => GetInvalid(AbilityHiddenUnavailable),
             _ => VALID,
         };
     }
@@ -390,13 +375,13 @@ public sealed class AbilityVerifier : Verifier
     /// </summary>
     /// <param name="pk">Pokémon</param>
     /// <param name="abilities">Current abilities</param>
-    /// <param name="gen">Generation</param>
+    /// <param name="generation">Generation</param>
     /// <param name="state">Permissive to allow ability to deviate under special circumstances</param>
     /// <param name="enc">Encounter template the <see cref="pk"/> was matched to.</param>
-    private CheckResult CheckMatch(PKM pk, IPersonalAbility12 abilities, int gen, AbilityState state, IEncounterTemplate enc)
+    private CheckResult CheckMatch(PKM pk, IPersonalAbility12 abilities, byte generation, AbilityState state, IEncounterTemplate enc)
     {
-        if (gen is (3 or 4) && pk.AbilityNumber == 4)
-            return GetInvalid(LAbilityHiddenUnavailable);
+        if (generation is (3 or 4) && pk.AbilityNumber == 4)
+            return GetInvalid(AbilityHiddenUnavailable);
 
         // other cases of hidden ability already flagged, all that is left is 1/2 mismatching
         if (state != AbilityState.MustMatch)
@@ -408,20 +393,20 @@ public sealed class AbilityVerifier : Verifier
             var abit = g3.AbilityBit;
             // We've sanitized our personal data to replace "None" abilities with the first ability.
             // Granbull, Vibrava, and Flygon have dual abilities being the same.
-            if (abilities.GetIsAbility12Same() && g3.Species is not ((int)Species.Granbull or (int)Species.Vibrava or (int)Species.Flygon)) // Not a dual ability
+            if (abilities.IsAbility12Same && g3.Species is not ((int)Species.Granbull or (int)Species.Vibrava or (int)Species.Flygon)) // Not a dual ability
             {
                 // Must not have the Ability bit flag set.
                 // Shadow encounters set a random ability index; don't bother checking if it's a re-battle for ability bit flipping.
                 if (abit && enc is not IShadow3)
-                    return GetInvalid(LAbilityMismatchFlag, CheckIdentifier.PID);
+                    return GetInvalid(CheckIdentifier.PID, AbilityMismatchFlag);
             }
             else
             {
                 // Gen3 mainline origin sets the Ability index based on the PID, but only if it has two abilities.
                 // Version value check isn't factually correct, but there are no C/XD gifts with (Version!=15) that have two abilities.
                 // Pikachu, Celebi, Ho-Oh
-                if (pk.Version != (int)GameVersion.CXD && abit != ((pk.EncryptionConstant & 1) == 1))
-                    return GetInvalid(LAbilityMismatchPID, CheckIdentifier.PID);
+                if (pk.Version != GameVersion.CXD && abit != ((pk.EncryptionConstant & 1) == 1))
+                    return GetInvalid(CheckIdentifier.PID, AbilityMismatchPID);
             }
         }
         else if (pk.Format >= 6)
@@ -440,7 +425,7 @@ public sealed class AbilityVerifier : Verifier
         var index = pk.AbilityNumber >> 1;
         var abil = abilities.GetAbilityAtIndex(index);
         if (abil != pk.Ability)
-            return GetInvalid(LAbilityMismatchPID);
+            return GetInvalid(AbilityMismatchPID);
 
         return VALID;
     }
@@ -448,7 +433,7 @@ public sealed class AbilityVerifier : Verifier
     // Ability Capsule can change between 1/2
     private static bool IsAbilityCapsuleModified(PKM pk, AbilityPermission encounterAbility, EvolutionHistory evos, EntityContext original)
     {
-        if (!AbilityChangeRules.IsAbilityCapsulePossible(evos, pk.Context, original))
+        if (!AbilityChangeRules.IsAbilityCapsulePossible(evos))
             return false; // Not available.
         if (pk.AbilityNumber == 4)
             return false; // Cannot alter to hidden ability.
@@ -457,31 +442,115 @@ public sealed class AbilityVerifier : Verifier
         return true;
     }
 
-    public static bool CanAbilityCapsule(int format, IPersonalAbility12 abilities)
+    public static bool CanAbilityCapsule(byte format, IPersonalAbility12 abilities)
     {
         if (format < 6) // Ability Capsule does not exist
             return false;
-        return !abilities.GetIsAbility12Same(); // Cannot alter ability index if it is the same as the other ability.
+        return !abilities.IsAbility12Same; // Cannot alter ability index if it is the same as the other ability.
     }
 
-    public static bool CanAbilityPatch(int format, IPersonalAbility12H abilities, ushort species)
+    public static bool CanAbilityPatch(byte format, IPersonalAbility12H abilities, ushort species)
     {
         if (format < 8) // Ability Patch does not exist
             return false;
 
         // Can alter ability index if it is different from the other abilities.
-        if (abilities.GetIsAbilityPatchPossible())
+        if (abilities.IsAbilityPatchPossible)
             return true;
 
         // Some species have a distinct hidden ability only on another form, and can change between that form and its current form.
-        return species switch
+        return AbilityChangeRules.IsFormChangeDifferentHidden(species);
+    }
+
+    private CheckResult VerifyBirthAbility(LegalityAnalysis data, PA9 pa9)
+    {
+        var enc = data.EncounterMatch;
+        var pi = PersonalTable.ZA[enc.Species, enc.Form];
+        var bitNum = pa9.AbilityNumber;
+        if (!IsValidAbilityBits(bitNum))
+            return INVALID;
+
+        var index = bitNum >> 1;
+        var species = pa9.Species;
+        var ability = pa9.Ability;
+
+        // In-battle forms allow mismatching for the current form.
+        if (FormInfo.HasMegaForm(species) || species is (int)Species.Aegislash)
         {
-            (int)Species.Giratina => true, // Form-0 is a/a/h
-            (int)Species.Tornadus => true, // Form-0 is a/a/h
-            (int)Species.Thundurus => true, // Form-0 is a/a/h
-            (int)Species.Landorus => true, // Form-0 is a/a/h
-            (int)Species.Enamorus => true, // Form-0 is a/a/h
-            _ => false,
-        };
+            var form = pa9.Form;
+            var current = PersonalTable.ZA[species, form];
+            var replaced = current.GetAbilityAtIndex(index);
+            if (ability == replaced)
+                return VALID;
+
+            if (species is (int)Species.Aegislash)
+            {
+                if (form != 0) // Blade
+                    return GetInvalid(AbilityMismatch); // Must have been replaced.
+            }
+            else
+            {
+                if (FormInfo.IsMegaForm(species, form))
+                    return GetInvalid(AbilityMismatch); // Must have been replaced.
+            }
+        }
+
+        // If deposited in HOME, it will realign to the deposited species-form ability.
+        // If you transfer back into ZA then evolve it, you can disjoint it again.
+        // If it hasn't evolved, then it must have been realigned by HOME.
+        if (pa9 is IHomeTrack { HasTracker: true })
+        {
+            var form = pa9.Form;
+            var actual = PersonalTable.ZA[species, form];
+            var require = actual.GetAbilityAtIndex(index);
+            if (ability == require)
+                return VALID;
+            if (enc.Species == species || IsAnyMoveSourceNotZA_Head(data.Info.Moves)) // Not evolved after; must match.
+                return GetInvalid(AbilityMismatch);
+        }
+
+        // Otherwise, we expect the form's personal info to match the original encounter's ability.
+        var expect = pi.GetAbilityAtIndex(index);
+        if (ability != expect)
+            return GetInvalid(AbilityMismatch);
+
+        return VerifyFinalState(data, enc, index);
+    }
+
+    private CheckResult VerifyFinalState(LegalityAnalysis data, IEncounterTemplate enc, int currentIndex)
+    {
+        if (currentIndex == 2) // Not normally obtainable. Has to visit another game where it can be switched.
+        {
+            if (AbilityChangeRules.IsAbilityPatchPossible(data.Info.EvoChainsAllGens))
+                return GetValid(AbilityPatchUsed);
+            return GetInvalid(AbilityHiddenUnavailable);
+        }
+
+        if (!enc.Ability.IsSingleValue(out var bit) || bit == currentIndex) // Any/Unchanged
+            return VALID;
+
+        var history = data.Info.EvoChainsAllGens;
+        if (bit == 2 && AbilityChangeRules.IsAbilityPatchRevertPossible(history, currentIndex))
+            return GetValid(AbilityPatchRevertUsed);
+        if (bit != 2 && AbilityChangeRules.IsAbilityCapsuleAvailable(history))
+            return GetValid(AbilityCapsuleUsed);
+
+        // Can't change to current state.
+        return GetInvalid(AbilityMismatch);
+    }
+
+    private static bool IsAnyMoveSourceNotZA_Head(ReadOnlySpan<MoveResult> infoMoves)
+    {
+        foreach (var info in infoMoves)
+        {
+            if (info.EvoStage != 0) // pre-evo
+                continue;
+            if (info.Context == EntityContext.Gen9a)
+                continue;
+
+            // move verifier doesn't check for realignment lockout scenario; disable check.
+            // return true;
+        }
+        return false;
     }
 }

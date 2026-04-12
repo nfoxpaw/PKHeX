@@ -7,46 +7,41 @@ namespace PKHeX.Core;
 public sealed class EncounterGenerator5 : IEncounterGenerator
 {
     public static readonly EncounterGenerator5 Instance = new();
+    public bool CanGenerateEggs => true;
 
     public IEnumerable<IEncounterable> GetEncounters(PKM pk, LegalInfo info)
     {
-        var chain = EncounterOrigin.GetOriginChain(pk, 5);
+        var chain = EncounterOrigin.GetOriginChain(pk, 5, Context);
         if (chain.Length == 0)
-            return Array.Empty<IEncounterable>();
+            return [];
         return GetEncounters(pk, chain, info);
     }
 
-    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
+    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion version, EncounterTypeGroup groups)
     {
-        var iterator = new EncounterPossible5(chain, groups, game);
+        var iterator = new EncounterPossible5(chain, groups, version);
         foreach (var enc in iterator)
             yield return enc;
     }
 
     public IEnumerable<IEncounterable> GetEncounters(PKM pk, EvoCriteria[] chain, LegalInfo info)
     {
-        var iterator = new EncounterEnumerator5(pk, chain, (GameVersion)pk.Version);
+        var iterator = new EncounterEnumerator5(pk, chain, pk.Version);
         foreach (var enc in iterator)
             yield return enc.Encounter;
     }
 
-    private const int Generation = 5;
     private const EntityContext Context = EntityContext.Gen5;
     private const byte EggLevel = EggStateLegality.EggMetLevel;
 
-    private static EncounterEgg CreateEggEncounter(ushort species, byte form, GameVersion version)
-    {
-        if (FormInfo.IsBattleOnlyForm(species, form, Generation) || species is (int)Species.Rotom or (int)Species.Castform)
-            form = FormInfo.GetOutOfBattleForm(species, form, Generation);
-        return new EncounterEgg(species, form, EggLevel, Generation, version, Context);
-    }
+    private static EncounterEgg5 CreateEggEncounter(ushort species, byte form, GameVersion version) => new(species, form, version);
 
     private static (ushort Species, byte Form) GetBaby(EvoCriteria lowest)
     {
         return EvolutionTree.Evolves5.GetBaseSpeciesForm(lowest.Species, lowest.Form);
     }
 
-    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg5? result)
     {
         result = null;
         var devolved = chain[^1];
@@ -68,14 +63,14 @@ public sealed class EncounterGenerator5 : IEncounterGenerator
         if (!PersonalTable.B2W2.IsPresentInGame(species, form))
             return false;
 
-        result = CreateEggEncounter(species, form, version);
+        result = CreateEggEncounter(species, form,version);
         return true;
     }
 
     // Both B/W and B2/W2 have the same egg move sets, so there is no point generating other-game pair encounters for traded eggs.
     // When hatched, the entity's Version is updated to the OT's.
 
-    public static bool TryGetSplit(EncounterEgg other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetSplit(EncounterEgg5 other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg5? result)
     {
         result = null;
         // Check for split-breed
@@ -89,7 +84,7 @@ public sealed class EncounterGenerator5 : IEncounterGenerator
         if (!Breeding.IsSplitBreedNotBabySpecies4(devolved.Species))
             return false;
 
-        result = other with { Species = devolved.Species, Form = devolved.Form };
+        result = other with { Species = devolved.Species };
         return true;
     }
 }

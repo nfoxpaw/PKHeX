@@ -8,6 +8,7 @@ public readonly ref struct PokeDexEntry9Paldea
     public const int SIZE = 0x18;
 
     private readonly Span<byte> Data;
+    // ReSharper disable once ConvertToPrimaryConstructor
     public PokeDexEntry9Paldea(Span<byte> data) => Data = data;
     public void Clear() => Data.Clear();
 
@@ -59,16 +60,24 @@ public readonly ref struct PokeDexEntry9Paldea
     public bool IsSeen => GetState() >= 2;
     public bool IsCaught => GetState() >= 3;
 
-    public void SetCaught(bool value) => SetState(value ? 3u : 2u);
+    public void SetCaught(bool value)
+    {
+        if (value)
+            SetState(3u);
+        else if (GetState() == 3u)  // only lower if currently caught
+            SetState(2u);
+        // state 0 or 1 or 2: no change
+    }
+
     public void SetSeen(bool value)
     {
-        var newValue = !value ? 1 : Math.Min(GetState(), 2);
+        var newValue = !value ? 1 : Math.Max(GetState(), 2);
         SetState(newValue);
     }
 
-    public bool GetIsGenderSeen(int gender) => (FlagsGenderSeen & (1u << gender)) != 0;
+    public bool GetIsGenderSeen(byte gender) => (FlagsGenderSeen & (1u << gender)) != 0;
 
-    public void SetIsGenderSeen(int gender, bool value)
+    public void SetIsGenderSeen(byte gender, bool value)
     {
         if (value)
             FlagsGenderSeen |= (ushort)(1u << gender);

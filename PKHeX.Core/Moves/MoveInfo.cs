@@ -28,19 +28,20 @@ public static class MoveInfo
     /// </summary>
     public static ReadOnlySpan<byte> GetPPTable(EntityContext context) => context switch
     {
-        Gen1 => MoveInfo1.MovePP_RBY,
-        Gen2 => MoveInfo2.MovePP_GSC,
-        Gen3 => MoveInfo3.MovePP_RS,
-        Gen4 => MoveInfo4.MovePP_DP,
-        Gen5 => MoveInfo5.MovePP_BW,
-        Gen6 => MoveInfo6.MovePP,
-        Gen7 => MoveInfo7.MovePP_SM,
-        Gen8 => MoveInfo8.MovePP_SWSH,
-        Gen9 => MoveInfo9.MovePP_SV,
+        Gen1 => MoveInfo1.PP,
+        Gen2 => MoveInfo2.PP,
+        Gen3 => MoveInfo3.PP,
+        Gen4 => MoveInfo4.PP,
+        Gen5 => MoveInfo5.PP,
+        Gen6 => MoveInfo6.PP,
+        Gen7 => MoveInfo7.PP,
+        Gen8 => MoveInfo8.PP,
+        Gen9 => MoveInfo9.PP,
 
-        Gen7b => MoveInfo7b.MovePP_GG,
-        Gen8a => MoveInfo8a.MovePP_LA,
-        Gen8b => MoveInfo8.MovePP_SWSH,
+        Gen7b => MoveInfo7b.PP,
+        Gen8a => MoveInfo8a.PP,
+        Gen8b => MoveInfo8.PP,
+        Gen9a => MoveInfo9a.PP,
         _ => throw new ArgumentOutOfRangeException(nameof(context)),
     };
 
@@ -53,7 +54,8 @@ public static class MoveInfo
         Gen8a => MoveInfo8a.DummiedMoves,
         Gen8b => MoveInfo8b.DummiedMoves,
         Gen9 => MoveInfo9.DummiedMoves,
-        _ => default,
+        Gen9a => MoveInfo9a.DummiedMoves,
+        _ => [],
     };
 
     /// <summary>
@@ -68,16 +70,24 @@ public static class MoveInfo
         _ => false,
     };
 
+    private const uint DynamaxMoveCount = (int)MaxSteelspike - (int)MaxFlare + 1;
+    private const uint TorqueMoveCount = (int)MagicalTorque - (int)BlazingTorque + 1;
+
     /// <summary>
     /// Checks if the move is a Dynamax-only move.
     /// </summary>
-    public static bool IsMoveDynamax(ushort move) => move is (>= (int)MaxFlare and <= (int)MaxSteelspike);
+    public static bool IsMoveDynamax(ushort move) => move - (uint)MaxFlare < DynamaxMoveCount;
 
     /// <summary>
     /// Checks if the move can be known by anything in any context.
     /// </summary>
     /// <remarks> Assumes the move ID is within [0,max]. </remarks>
-    public static bool IsMoveKnowable(ushort move) => !IsMoveZ(move) && !IsMoveDynamax(move);
+    public static bool IsMoveKnowable(ushort move) => !IsMoveZ(move) && !IsMoveDynamax(move) && !IsMoveTorque(move);
+
+    /// <summary>
+    /// Checks if the move is a Starmobile-only move.
+    /// </summary>
+    public static bool IsMoveTorque(ushort move) => move - (uint)BlazingTorque < TorqueMoveCount;
 
     /// <summary>
     /// Checks if the <see cref="move"/> is unable to be used in battle.
@@ -102,7 +112,10 @@ public static class MoveInfo
         return IsDummiedMove(hashSet, move);
     }
 
-    private static bool IsDummiedMove(ReadOnlySpan<byte> bitSet, ushort move)
+    /// <inheritdoc cref="IsDummiedMove(PKM, int)"/>
+    /// <param name="bitSet">BitSet to check against</param>
+    /// <param name="move">Move index to check</param>
+    public static bool IsDummiedMove(ReadOnlySpan<byte> bitSet, ushort move)
     {
         var offset = move >> 3;
         if (offset >= bitSet.Length)
@@ -137,7 +150,7 @@ public static class MoveInfo
     /// </summary>
     /// <param name="move">Move ID</param>
     /// <param name="context">Generation to check</param>
-    /// <returns>True if can be sketched, false if not available.</returns>
+    /// <returns>True if the move can be sketched, false if not possible.</returns>
     public static bool IsSketchValid(ushort move, EntityContext context)
     {
         if (move > GetMaxMoveID(context))
@@ -152,14 +165,12 @@ public static class MoveInfo
     /// <summary>
     /// Checks if the move can be sketched in any game.
     /// </summary>
+    /// <param name="move">Sketched move</param>
     private static bool IsSketchPossible(ushort move) => move switch
     {
         // Can't Sketch
         (int)Struggle => false,
         (int)Chatter => false,
-
-        // Unreleased
-        (int)LightofRuin => false,
 
         _ => IsMoveKnowable(move),
     };
@@ -167,14 +178,35 @@ public static class MoveInfo
     /// <summary>
     /// Checks if the move can be sketched in a specific game context. Pre-check with <see cref="IsSketchPossible(ushort)"/>.
     /// </summary>
-    /// <param name="move"></param>
-    /// <param name="context"></param>
+    /// <param name="move">Sketched move</param>
+    /// <param name="context">Context currently present in</param>
     private static bool IsSketchPossible(ushort move, EntityContext context) => context switch
     {
-        Gen6 when move is (int)ThousandArrows or (int)ThousandWaves => false,
+        Gen2 when move is (int)SelfDestruct or (int)Explosion or (ushort)Mimic or (ushort)Metronome or (ushort)MirrorMove or (ushort)Transform or (ushort)SleepTalk => false,
+        Gen6 when move is (int)ThousandArrows or (int)ThousandWaves or (int)LightofRuin => false,
+        Gen7 or Gen8 when move is (int)LightofRuin => false,
         Gen8b when IsDummiedMove(MoveInfo8b.DummiedMoves, move) => false,
+        Gen9 when IsDummiedMove(MoveInfo9.DummiedMoves, move) || DisallowSketch9.Contains(move) => false,
         _ => true,
     };
+
+    /// <summary>
+    /// Moves that cannot be sketched in <see cref="Gen9"/>.
+    /// </summary>
+    private static ReadOnlySpan<ushort> DisallowSketch9 =>
+    [
+        (ushort)DarkVoid,
+        (ushort)LightofRuin, // No backwards transfer from ZA
+        (ushort)HyperspaceFury,
+      //(ushort)BreakneckBlitzP, // 3.0.0 has this move set, but this move is disallowed with our other checks
+        (ushort)RevivalBlessing,
+        (ushort)BlazingTorque, // Revavroom
+        (ushort)WickedTorque, // Revavroom
+        (ushort)NoxiousTorque, // Revavroom
+        (ushort)CombatTorque, // Revavroom
+        (ushort)MagicalTorque, // Revavroom
+        (ushort)TeraStarstorm,
+    ];
 
     private static int GetMaxMoveID(EntityContext context) => context switch
     {
@@ -190,14 +222,18 @@ public static class MoveInfo
         Gen8a => Legal.MaxMoveID_8a,
         Gen8b => Legal.MaxMoveID_8b,
         Gen9 => Legal.MaxMoveID_9,
+        Gen9a => Legal.MaxMoveID_9a,
         _ => -1,
     };
 
-    public static byte GetType(ushort move, EntityContext context) => context switch
+    public static byte GetType(ushort move, EntityContext context) => GetType(move, GetTypeTable(context));
+
+    public static ReadOnlySpan<byte> GetTypeTable(EntityContext context) => context switch
     {
-        Gen1 => GetType(move, MoveInfo1.MoveType_RBY), // Bite, Gust, Karate Chop, Sand Attack
-        >= Gen2 and <= Gen5 => GetType(move, MoveInfo5.MoveType_BW), // Charm, Moonlight, Sweet Kiss
-        _ => GetType(move, MoveInfo9.MoveType_SV),
+        Gen1 => MoveInfo1.Type, // Bite, Gust, Karate Chop, Sand Attack
+        >= Gen2 and <= Gen5 => MoveInfo5.Type, // Charm, Moonlight, Sweet Kiss
+        Gen9a => MoveInfo9a.Type, // Normal in S/V, Grass in Z-A
+        _ => MoveInfo9.Type,
     };
 
     private static byte GetType(ushort move, ReadOnlySpan<byte> types)
@@ -207,11 +243,11 @@ public static class MoveInfo
         return types[move];
     }
 
-    public static bool IsAnyFromGeneration(int generation, ReadOnlySpan<MoveResult> moves)
+    public static bool IsAnyFromGeneration(EntityContext context, ReadOnlySpan<MoveResult> moves)
     {
         foreach (var move in moves)
         {
-            if (move.Generation == generation)
+            if (move.Context == context)
                 return true;
         }
         return false;

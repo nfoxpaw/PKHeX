@@ -10,7 +10,7 @@ namespace PKHeX.Core;
 /// <inheritdoc cref="EncounterStatic8Nest{T}"/>
 public sealed record EncounterStatic8U : EncounterStatic8Nest<EncounterStatic8U>, ILocation
 {
-    int ILocation.Location => MaxLair;
+    ushort ILocation.Location => MaxLair;
     private const ushort Location = MaxLair;
     public override string Name => "Max Lair Encounter";
 
@@ -41,9 +41,77 @@ public sealed record EncounterStatic8U : EncounterStatic8Nest<EncounterStatic8U>
     }
     protected override ushort GetLocation() => Location;
 
-    // no downleveling, unlike all other raids
-    protected override bool IsMatchLevel(PKM pk) => pk.Met_Level == Level;
-    protected override bool IsMatchLocation(PKM pk) => Location == pk.Met_Location;
+    protected override void SetTrainerName(ReadOnlySpan<char> name, PK8 pk)
+    {
+        if (ShouldHaveScientistTrash)
+            base.SetTrainerName(GetScientistName(pk.Language), pk);
+        base.SetTrainerName(name, pk);
+    }
 
-    public bool IsShinyXorValid(ushort pkShinyXor) => pkShinyXor is > 15 or 1;
+    // These raids are always generated as Never-Shiny, and only at the choice screen are they possibly set shiny.
+    private const Shiny ShinyMethod = Shiny.Never;
+    private const byte ShinyXor = 1; // If forced shiny, the XOR is always 1.
+
+    // Need to override to ensure the fallback also uses Never-Shiny.
+    protected override void SetPINGA(PK8 pk, in EncounterCriteria criteria, PersonalInfo8SWSH pi)
+    {
+        Span<int> iv = stackalloc int[6];
+
+        // Honor a shiny request only at the end; generate as never-shiny to avoid shiny PID rejection in main RNG method.
+        var isShinyRequested = criteria.Shiny.IsShiny();
+        var iterCriteria = criteria with { Shiny = ShinyMethod };
+
+        int ctr = 0;
+        var rand = new Xoroshiro128Plus(Util.Rand.Rand64());
+        var param = GetParam(pi);
+        ulong seed;
+        const int max = 100_000;
+        do
+        {
+            if (TryApply(pk, seed = rand.Next(), iv, param, iterCriteria))
+                break;
+        } while (++ctr < max);
+
+        if (ctr == max) // fail
+        {
+            iterCriteria = iterCriteria.WithoutIVs();
+            if (!TryApply(pk, seed = rand.Next(), iv, param, iterCriteria))
+            {
+                iterCriteria = EncounterCriteria.Unrestricted with { Shiny = ShinyMethod };
+                while (!TryApply(pk, seed = rand.Next(), iv, param, iterCriteria)) { }
+            }
+        }
+
+        FinishCorrelation(pk, seed);
+        if (isShinyRequested)
+            pk.PID = ShinyUtil.GetShinyPID(pk.TID16, pk.SID16, pk.PID, ShinyXor);
+    }
+
+    private GenerateParam8 GetParam(PersonalInfo8SWSH pi)
+    {
+        var ratio = RemapGenderToParam(Gender, pi);
+        return new GenerateParam8(Species, ratio, FlawlessIVCount, Ability, ShinyMethod, Nature.Random, IVs);
+    }
+
+    // no downleveling, unlike all other raids
+    protected override bool IsMatchLevel(PKM pk) => pk.MetLevel == Level;
+    protected override bool IsMatchLocation(PKM pk) => Location == pk.MetLocation;
+
+    public bool IsShinyXorValid(ushort pkShinyXor) => pkShinyXor is > 15 or ShinyXor; // not shiny, or shiny with XOR=1
+
+    public bool ShouldHaveScientistTrash => Level != 70; // Level 65, not legendary/sub-legendary/ultra beast
+
+    public static ReadOnlySpan<char> GetScientistName(int language) => language switch
+    {
+        (int)LanguageID.Japanese => "けんきゅういん",
+        (int)LanguageID.English => "Scientist",
+        (int)LanguageID.French => "Scientifique",
+        (int)LanguageID.Italian => "Scienziata",
+        (int)LanguageID.German => "Forscherin",
+        (int)LanguageID.Spanish => "Científica",
+        (int)LanguageID.Korean => "연구원",
+        (int)LanguageID.ChineseS => "研究员",
+        (int)LanguageID.ChineseT => "研究員",
+        _ => [],
+    };
 }

@@ -1,6 +1,7 @@
-using System.Diagnostics.CodeAnalysis;
-using static PKHeX.Core.LegalityCheckStrings;
+using System;
+using static PKHeX.Core.LegalityCheckResultCode;
 using static PKHeX.Core.Ball;
+using static PKHeX.Core.BallVerificationResult;
 
 namespace PKHeX.Core;
 
@@ -16,197 +17,213 @@ public sealed class BallVerifier : Verifier
         if (data.Entity.Format <= 2)
             return; // no ball info saved
         var result = VerifyBall(data);
-        data.AddLine(result);
+        data.AddLine(Localize(result));
     }
 
-    private static int IsReplacedBall(IVersion enc, PKM pk) => pk switch
+    private static Ball IsReplacedBall(IVersion enc, PKM pk) => pk switch
     {
         // Trading from PLA origin -> SW/SH will replace the Legends: Arceus ball with a regular Poké Ball
-        PK8 when enc.Version == GameVersion.PLA => (int)Poke,
+        // Enamorus is a special case where the ball is not replaced with a Poké Ball (it's a Cherish Ball)
+        PK8 when enc.Version == GameVersion.PLA && enc is not IFixedBall { FixedBall: (> 0 and < Strange) } => Poke,
 
         // No replacement done.
-        _ => (int)None,
+        _ => NoBallReplace,
     };
 
-    private CheckResult VerifyBall(LegalityAnalysis data)
+    private const Ball NoBallReplace = None;
+
+    public static BallVerificationResult VerifyBall(LegalityAnalysis data)
     {
-        var Info = data.Info;
-        var enc = Info.EncounterMatch;
-
-        var ball = IsReplacedBall(enc, data.Entity);
-        if (ball != 0)
-            return VerifyBallEquals(data, ball);
-
-        // Capture / Inherit cases -- can be one of many balls
+        var info = data.Info;
+        var enc = info.EncounterOriginal;
         var pk = data.Entity;
-        if (pk.Species == (int)Species.Shedinja && enc.Species != (int)Species.Shedinja) // Shedinja. For gen3, copy the ball from Nincada
-        {
-            // Only a Gen3 origin Shedinja can copy the wild ball.
-            // Evolution chains will indicate if it could have existed as Shedinja in Gen3.
-            // The special move verifier has a similar check!
-            if (pk is { HGSS: true, Ball: (int)Sport }) // Can evolve in DP to retain the HG/SS ball (separate byte) -- not able to be captured in any other ball
-                return VerifyBallEquals(data, (int)Sport);
-            if (Info.Generation != 3 || Info.EvoChainsAllGens.Gen3.Length != 2) // not evolved in Gen3 Nincada->Shedinja
-                return VerifyBallEquals(data, (int)Poke); // Poké ball Only
-        }
 
-        // Fixed ball cases -- can be only one ball ever
-        switch (enc)
-        {
-            case IFixedBall { FixedBall: not None } s:
-                return VerifyBallEquals(data, (byte)s.FixedBall);
-            case EncounterSlot8GO: // Already a strict match
-                return GetResult(true);
-        }
+        Ball current = (Ball)pk.Ball;
+        if (enc.Species == (int)Species.Nincada && pk.Species == (int)Species.Shedinja)
+            return VerifyEvolvedShedinja(enc, current, pk, info);
+
+        return VerifyBall(enc, current, pk);
+    }
+
+    private static BallVerificationResult VerifyEvolvedShedinja(IEncounterTemplate enc, Ball current, PKM pk, LegalInfo info)
+    {
+        // Nincada evolving into Shedinja normally reverts to Poké Ball.
+
+        // Gen3 Evolution: Copy current ball.
+        if (enc is EncounterSlot3 && info.EvoChainsAllGens.Gen3.Length == 2)
+            return VerifyBall(enc, current, pk);
+
+        // Gen4 D/P/Pt: Retain the HG/SS ball (stored in a separate byte) -- can only be caught in BCC with Sport Ball.
+        if (enc is EncounterSlot4 { Type: SlotType4.BugContest } && info.EvoChainsAllGens.Gen4.Length == 2)
+            return GetResult(current is Sport or Poke);
+
+        return VerifyBallEquals(current, Poke); // Poké Ball Only
+    }
+
+    /// <summary>
+    /// Verifies the currently set ball for the <see cref="PKM"/>.
+    /// </summary>
+    /// <param name="enc">Encounter template</param>
+    /// <param name="current">Current ball</param>
+    /// <param name="pk">Misc details like Version and Ability</param>
+    /// <remarks>Call this directly instead of the <see cref="LegalityAnalysis"/> overload if you've already ruled out the above cases needing Evolution chains.</remarks>
+    public static BallVerificationResult VerifyBall(IEncounterTemplate enc, Ball current, PKM pk)
+    {
+        // Capture / Inherit cases -- can be one of many balls
+        var ball = IsReplacedBall(enc, pk);
+        if (ball != NoBallReplace)
+            return VerifyBallEquals(current, ball);
 
         // Capturing with Heavy Ball is impossible in Sun/Moon for specific species.
-        if (pk is { Ball: (int)Heavy, SM: true } && enc is not EncounterEgg && BallUseLegality.IsAlolanCaptureNoHeavyBall(enc.Species))
-            return GetInvalid(LBallHeavy); // Heavy Ball, can inherit if from egg (US/UM fixed catch rate calc)
+        if (current is Heavy && enc is not EncounterEgg7 && pk is { SM: true } && BallUseLegality.IsAlolanCaptureNoHeavyBall(enc.Species))
+            return BadCaptureHeavy; // Heavy Ball, can inherit if from egg (US/UM fixed catch rate calc)
 
         return enc switch
         {
-            EncounterStatic5Entree => VerifyBallEquals((Ball)pk.Ball, BallUseLegality.DreamWorldBalls),
-            EncounterEgg => VerifyBallEgg(data),
-            EncounterInvalid => VerifyBallEquals(data, pk.Ball), // ignore ball, pass whatever
-            _ => VerifyBallEquals((Ball)pk.Ball, BallUseLegality.GetWildBalls(data.Info.Generation, enc.Version)),
+            EncounterInvalid => GetResult(true), // ignore ball, pass whatever
+            EncounterSlot8GO g => GetResult(g.IsBallValid(current, pk.Species, pk)),
+            IFixedBall { FixedBall: not None } s => VerifyBallEquals(current, s.FixedBall),
+            EncounterSlot8 when pk is IRibbonSetMark8 { RibbonMarkCurry: true } or IRibbonSetAffixed { AffixedRibbon: (sbyte)RibbonIndex.MarkCurry }
+                => GetResult(current is Poke or Great or Ultra),
+
+            IEncounterEgg egg => VerifyBallEgg(egg, current, pk), // Inheritance rules can vary.
+            EncounterStatic5Entree => VerifyBallEquals(current, BallUseLegality.DreamWorldBalls),
+            _ => VerifyBallEquals(current, BallUseLegality.GetWildBalls(enc.Generation, enc.Version)),
         };
     }
 
-    private CheckResult VerifyBallEgg(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEgg(IEncounterEgg enc, Ball ball, PKM pk)
     {
-        var pk = data.Entity;
-        var info = data.Info;
-        if (info.Generation < 6) // No inheriting Balls
-            return VerifyBallEquals(data, (int)Poke); // Must be Pokéball -- no ball inheritance.
+        if (enc.Generation < 6) // No inheriting Balls
+            return VerifyBallEquals(ball, Poke); // Must be Poké Ball -- no ball inheritance.
 
-        return pk.Ball switch
+        return ball switch
         {
-            (int)Master => GetInvalid(LBallEggMaster), // Master Ball
-            (int)Cherish => GetInvalid(LBallEggCherish), // Cherish Ball
-            _ => VerifyBallInherited(data, info.EncounterMatch.Context),
+            Master => BadInheritMaster,
+            Cherish => BadInheritCherish,
+            _ => VerifyBallInherited(enc, ball, pk),
         };
     }
 
-    private CheckResult VerifyBallInherited(LegalityAnalysis data, EntityContext context) => context switch
+    private static BallVerificationResult VerifyBallInherited(IEncounterEgg egg, Ball ball, PKM pk) => egg switch
     {
-        EntityContext.Gen6 => VerifyBallEggGen6(data), // Gen6 Inheritance Rules
-        EntityContext.Gen7 => VerifyBallEggGen7(data), // Gen7 Inheritance Rules
-        EntityContext.Gen8 => VerifyBallEggGen8(data),
-        EntityContext.Gen8b => VerifyBallEggGen8BDSP(data),
-        EntityContext.Gen9 => VerifyBallEggGen9(data),
-        _ => GetInvalid(LBallNone),
+        EncounterEgg6 e6 => VerifyBallEggGen6(e6, ball, pk), // Gen6 Inheritance Rules
+        EncounterEgg7 e7 => VerifyBallEggGen7(e7, ball, pk), // Gen7 Inheritance Rules
+        EncounterEgg8 e8 => VerifyBallEggGen8(e8, ball),
+        EncounterEgg8b b => VerifyBallEggGen8BDSP(b, ball),
+        EncounterEgg9 e9 => VerifyBallEggGen9(e9, ball),
+        _ => BadEncounter,
     };
 
-    private CheckResult VerifyBallEggGen6(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEggGen6(EncounterEgg6 enc, Ball ball, PKM pk)
     {
-        var pk = data.Entity;
-        var ball = (Ball)pk.Ball;
-        var instance = BallContext6.Instance;
         if (ball > Dream)
-            return GetInvalid(LBallUnavailable);
+            return BadOutOfRange;
 
-        var enc = data.EncounterMatch;
-        var result = instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
-        return result switch
-        {
-            BallInheritanceResult.Valid => GetValid(LBallSpeciesPass),
-            BallInheritanceResult.BadAbility => GetInvalid(LBallAbility),
-            _ => GetInvalid(LBallSpecies),
-        };
+        var result = BallContext6.Instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
+        return GetResult(result);
     }
 
-    private CheckResult VerifyBallEggGen7(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEggGen7(EncounterEgg7 enc, Ball ball, PKM pk)
     {
-        var pk = data.Entity;
-        var ball = (Ball)pk.Ball;
-        var instance = BallContext7.Instance;
         if (ball > Beast)
-            return GetInvalid(LBallUnavailable);
+            return BadOutOfRange;
 
-        var enc = data.EncounterMatch;
-        var result = instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
-        return result switch
-        {
-            BallInheritanceResult.Valid => GetValid(LBallSpeciesPass),
-            BallInheritanceResult.BadAbility => GetInvalid(LBallAbility),
-            _ => GetInvalid(LBallSpecies),
-        };
+        var result = BallContext7.Instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
+        return GetResult(result);
     }
 
-    private CheckResult VerifyBallEggGen8BDSP(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEggGen8BDSP(EncounterEgg8b enc, Ball ball)
     {
-        var species = data.EncounterMatch.Species;
-        var pk = data.Entity;
-        var ball = (Ball)pk.Ball;
+        if (ball > Beast)
+            return BadOutOfRange;
+
+        var species = enc.Species;
         if (species is (int)Species.Spinda) // Can't transfer via HOME.
             return VerifyBallEquals(ball, BallUseLegality.WildPokeBalls4_HGSS);
 
-        var instance = BallContextHOME.Instance;
-        if (ball > Beast)
-            return GetInvalid(LBallUnavailable);
-
-        var enc = data.EncounterMatch;
-        var result = instance.CanBreedWithBall(species, enc.Form, ball, pk);
-        return result switch
-        {
-            BallInheritanceResult.Valid => GetValid(LBallSpeciesPass),
-            BallInheritanceResult.BadAbility => GetInvalid(LBallAbility),
-            _ => GetInvalid(LBallSpecies),
-        };
+        var result = BallContextHOME.Instance.CanBreedWithBall(species, enc.Form, ball);
+        return GetResult(result);
     }
 
-    private CheckResult VerifyBallEggGen8(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEggGen8(EncounterEgg8 enc, Ball ball)
     {
-        var pk = data.Entity;
-        var ball = (Ball)pk.Ball;
-        var instance = BallContextHOME.Instance;
         if (ball > Beast)
-            return GetInvalid(LBallUnavailable);
+            return BadOutOfRange;
 
-        var enc = data.EncounterMatch;
-        var result = instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
-        return result switch
-        {
-            BallInheritanceResult.Valid => GetValid(LBallSpeciesPass),
-            BallInheritanceResult.BadAbility => GetInvalid(LBallAbility),
-            _ => GetInvalid(LBallSpecies),
-        };
+        var result = BallContextHOME.Instance.CanBreedWithBall(enc.Species, enc.Form, ball);
+        return GetResult(result);
     }
 
-    private CheckResult VerifyBallEggGen9(LegalityAnalysis data)
+    private static BallVerificationResult VerifyBallEggGen9(EncounterEgg9 enc, Ball ball)
     {
-        var enc = data.EncounterMatch;
+        if (ball > Beast)
+            return BadOutOfRange;
+
         var species = enc.Species;
-        var pk = data.Entity;
-        var ball = (Ball)pk.Ball;
-
-        // Paldea Starters: Only via GO (Adventures Abound)
-        if (species is >= (int)Species.Sprigatito and <= (int)Species.Quaquaval)
-            return VerifyBallEquals(ball, BallUseLegality.WildPokeballs8g_WithoutRaid);
-
-        // PLA Voltorb: Only via PLA (transfer only, not wild) and GO
-        if (enc is { Species: (ushort)Species.Voltorb, Form: 1 })
-            return VerifyBallEquals(ball, BallUseLegality.WildPokeballs8g_WithRaid);
-
-        // S/V Tauros forms > 1: Only local Wild Balls for Blaze/Aqua breeds -- can't inherit balls from Kantonian/Combat.
-        if (enc is { Species: (ushort)Species.Tauros, Form: > 1 })
-            return VerifyBallEquals(ball, BallUseLegality.WildPokeballs9);
-
-        var instance = BallContextHOME.Instance;
-        if (ball > Beast)
-            return GetInvalid(LBallUnavailable);
-
-        var result = instance.CanBreedWithBall(enc.Species, enc.Form, ball, pk);
-        return result switch
-        {
-            BallInheritanceResult.Valid => GetValid(LBallSpeciesPass),
-            BallInheritanceResult.BadAbility => GetInvalid(LBallAbility),
-            _ => GetInvalid(LBallSpecies),
-        };
+        var result = BallContextHOME.Instance.CanBreedWithBall(species, enc.Form, ball);
+        return GetResult(result);
     }
 
-    private CheckResult VerifyBallEquals(LegalityAnalysis data, int ball) => GetResult(ball == data.Entity.Ball);
-    private CheckResult VerifyBallEquals(Ball ball, [ConstantExpected] ulong permit) => GetResult(BallUseLegality.IsBallPermitted(permit, (int)ball));
+    private static BallVerificationResult VerifyBallEquals(Ball ball, Ball permit) => GetResult(ball == permit);
+    private static BallVerificationResult VerifyBallEquals(Ball ball, ulong permit) => GetResult(BallUseLegality.IsBallPermitted(permit, (byte)ball));
 
-    private CheckResult GetResult(bool valid) => valid ? GetValid(LBallEnc) : GetInvalid(LBallEncMismatch);
+    private static BallVerificationResult GetResult(bool valid) => valid ? ValidEncounter : BadEncounter;
+
+    private static BallVerificationResult GetResult(BallInheritanceResult result) => result switch
+    {
+        BallInheritanceResult.Valid => ValidInheritedSpecies,
+        BallInheritanceResult.BadAbility => BadInheritAbility,
+        _ => BadInheritSpecies,
+    };
+
+    private CheckResult Localize(BallVerificationResult value)
+    {
+        bool valid = value.IsValid;
+        var msg = value.GetMessage();
+        return Get(valid ? Severity.Valid : Severity.Invalid, msg);
+    }
+}
+
+public enum BallVerificationResult
+{
+    ValidEncounter,
+    ValidInheritedSpecies,
+
+    BadEncounter,
+    BadCaptureHeavy,
+
+    BadInheritAbility,
+    BadInheritSpecies,
+    BadInheritCherish,
+    BadInheritMaster,
+
+    BadOutOfRange,
+}
+
+public static class BallVerificationResultExtensions
+{
+    extension(BallVerificationResult value)
+    {
+        public bool IsValid => value switch
+        {
+            ValidEncounter => true,
+            ValidInheritedSpecies => true,
+            _ => false,
+        };
+
+        public LegalityCheckResultCode GetMessage() => value switch
+        {
+            ValidEncounter => BallEnc,
+            ValidInheritedSpecies => BallSpeciesPass,
+            BadEncounter => BallEncMismatch,
+            BadCaptureHeavy => BallHeavy,
+            BadInheritAbility => BallAbility,
+            BadInheritSpecies => BallSpecies,
+            BadInheritCherish => BallEggCherish,
+            BadInheritMaster => BallEggMaster,
+            BadOutOfRange => BallUnavailable,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, null),
+        };
+    }
 }

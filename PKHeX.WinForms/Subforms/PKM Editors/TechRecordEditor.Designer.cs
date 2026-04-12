@@ -1,3 +1,5 @@
+using PKHeX.WinForms.Controls;
+
 namespace PKHeX.WinForms
 {
     partial class TechRecordEditor
@@ -32,19 +34,19 @@ namespace PKHeX.WinForms
             B_Cancel = new System.Windows.Forms.Button();
             B_None = new System.Windows.Forms.Button();
             B_All = new System.Windows.Forms.Button();
-            dgv = new System.Windows.Forms.DataGridView();
             HasFlag = new System.Windows.Forms.DataGridViewCheckBoxColumn();
             Index = new System.Windows.Forms.DataGridViewTextBoxColumn();
             Type = new System.Windows.Forms.DataGridViewImageColumn();
             TypeInt = new System.Windows.Forms.DataGridViewTextBoxColumn();
             MoveName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            dgv = new DoubleBufferedDataGridView();
             ((System.ComponentModel.ISupportInitialize)dgv).BeginInit();
             SuspendLayout();
             // 
             // B_Save
             // 
             B_Save.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
-            B_Save.Location = new System.Drawing.Point(126, 398);
+            B_Save.Location = new System.Drawing.Point(126, 401);
             B_Save.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             B_Save.Name = "B_Save";
             B_Save.Size = new System.Drawing.Size(105, 27);
@@ -56,7 +58,7 @@ namespace PKHeX.WinForms
             // B_Cancel
             // 
             B_Cancel.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
-            B_Cancel.Location = new System.Drawing.Point(14, 398);
+            B_Cancel.Location = new System.Drawing.Point(14, 401);
             B_Cancel.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             B_Cancel.Name = "B_Cancel";
             B_Cancel.Size = new System.Drawing.Size(105, 27);
@@ -68,7 +70,7 @@ namespace PKHeX.WinForms
             // B_None
             // 
             B_None.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
-            B_None.Location = new System.Drawing.Point(126, 365);
+            B_None.Location = new System.Drawing.Point(126, 368);
             B_None.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             B_None.Name = "B_None";
             B_None.Size = new System.Drawing.Size(105, 27);
@@ -80,7 +82,7 @@ namespace PKHeX.WinForms
             // B_All
             // 
             B_All.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
-            B_All.Location = new System.Drawing.Point(14, 365);
+            B_All.Location = new System.Drawing.Point(14, 368);
             B_All.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             B_All.Name = "B_All";
             B_All.Size = new System.Drawing.Size(105, 27);
@@ -104,10 +106,9 @@ namespace PKHeX.WinForms
             dgv.MultiSelect = false;
             dgv.Name = "dgv";
             dgv.RowHeadersVisible = false;
-            dgv.RowTemplate.Height = 25;
             dgv.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             dgv.ShowEditingIcon = false;
-            dgv.Size = new System.Drawing.Size(240, 359);
+            dgv.Size = new System.Drawing.Size(243, 362);
             dgv.TabIndex = 6;
             dgv.CellClick += ClickCell;
             dgv.ColumnHeaderMouseClick += SortColumn;
@@ -160,7 +161,7 @@ namespace PKHeX.WinForms
             // TechRecordEditor
             // 
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Inherit;
-            ClientSize = new System.Drawing.Size(245, 438);
+            ClientSize = new System.Drawing.Size(248, 441);
             Controls.Add(dgv);
             Controls.Add(B_None);
             Controls.Add(B_All);
@@ -170,6 +171,7 @@ namespace PKHeX.WinForms
             Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             MaximizeBox = false;
             MinimizeBox = false;
+            MinimumSize = new System.Drawing.Size(264, 480);
             Name = "TechRecordEditor";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             Text = "TR Relearn Editor";
@@ -182,8 +184,8 @@ namespace PKHeX.WinForms
         private System.Windows.Forms.Button B_Cancel;
         private System.Windows.Forms.Button B_None;
         private System.Windows.Forms.Button B_All;
-        private System.Windows.Forms.DataGridView dgv;
         private System.Windows.Forms.DataGridViewCheckBoxColumn HasFlag;
+        private DoubleBufferedDataGridView dgv;
         private System.Windows.Forms.DataGridViewTextBoxColumn Index;
         private System.Windows.Forms.DataGridViewImageColumn Type;
         private System.Windows.Forms.DataGridViewTextBoxColumn TypeInt;

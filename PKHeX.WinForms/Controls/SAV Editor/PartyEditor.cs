@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using PKHeX.Core;
@@ -8,16 +8,27 @@ namespace PKHeX.WinForms.Controls;
 
 public partial class PartyEditor : UserControl, ISlotViewer<PictureBox>
 {
-    public IList<PictureBox> SlotPictureBoxes { get; private set; } = Array.Empty<PictureBox>();
+    public IList<PictureBox> SlotPictureBoxes { get; private set; } = [];
     public SaveFile SAV => M?.SE.SAV ?? throw new ArgumentNullException(nameof(SAV));
 
     public int BoxSlotCount { get; private set; }
     public SlotChangeManager? M { get; set; }
     public bool FlagIllegal { get; set; }
 
+    private Func<PKM, bool>? _searchFilter;
+
     public PartyEditor()
     {
         InitializeComponent();
+    }
+
+    public void ApplyNewFilter(Func<PKM, bool>? filter, bool reload = true)
+    {
+        if (filter == _searchFilter)
+            return;
+        _searchFilter = filter;
+        if (reload && SAV.HasParty)
+            ResetSlots();
     }
 
     internal bool InitializeGrid()
@@ -38,8 +49,8 @@ public partial class PartyEditor : UserControl, ISlotViewer<PictureBox>
         BoxSlotCount = SlotPictureBoxes.Count;
         foreach (var pb in SlotPictureBoxes)
         {
-            pb.MouseEnter += (o, args) => BoxSlot_MouseEnter(pb, args);
-            pb.MouseLeave += (o, args) => BoxSlot_MouseLeave(pb, args);
+            pb.MouseEnter += (_, args) => BoxSlot_MouseEnter(pb, args);
+            pb.MouseLeave += (_, args) => BoxSlot_MouseLeave(pb, args);
             pb.MouseClick += BoxSlot_MouseClick;
             pb.MouseMove += BoxSlot_MouseMove;
             pb.MouseDown += BoxSlot_MouseDown;
@@ -48,7 +59,7 @@ public partial class PartyEditor : UserControl, ISlotViewer<PictureBox>
             pb.DragEnter += BoxSlot_DragEnter;
             pb.DragDrop += BoxSlot_DragDrop;
             pb.QueryContinueDrag += BoxSlot_QueryContinueDrag;
-            pb.GiveFeedback += (sender, e) => e.UseDefaultCursors = false;
+            pb.GiveFeedback += (_, e) => e.UseDefaultCursors = false;
             pb.AllowDrop = true;
         }
     }
@@ -75,7 +86,18 @@ public partial class PartyEditor : UserControl, ISlotViewer<PictureBox>
         }
 
         var pb = SlotPictureBoxes[index];
-        SlotUtil.UpdateSlot(pb, slot, pk, SAV, FlagIllegal, type);
+        var flags = GetFlags(pk);
+        SlotUtil.UpdateSlot(pb, slot, pk, SAV, flags, type);
+    }
+
+    private SlotVisibilityType GetFlags(PKM pk)
+    {
+        var result = SlotVisibilityType.None;
+        if (FlagIllegal)
+            result |= SlotVisibilityType.CheckLegalityIndicate;
+        if (_searchFilter != null && !_searchFilter(pk))
+            result |= SlotVisibilityType.FilterMismatch;
+        return result;
     }
 
     public int GetViewIndex(ISlotInfo slot)
@@ -108,7 +130,8 @@ public partial class PartyEditor : UserControl, ISlotViewer<PictureBox>
         foreach (var pb in SlotPictureBoxes)
         {
             var slot = (SlotInfoParty) GetSlotData(pb);
-            SlotUtil.UpdateSlot(pb, slot, slot.Read(SAV), SAV, FlagIllegal);
+            var pk = slot.Read(SAV);
+            SlotUtil.UpdateSlot(pb, slot, pk, SAV, GetFlags(pk));
         }
 
         if (M?.Env.Slots.Publisher.Previous is SlotInfoParty p)

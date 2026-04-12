@@ -5,19 +5,18 @@ using static System.Buffers.Binary.BinaryPrimitives;
 
 namespace PKHeX.Core;
 
-public sealed record EncounterDist9
-    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK9>, ITeraRaid9, IMoveset, IFlawlessIVCount, IFixedGender
+public sealed record EncounterDist9 : ITeraRaid9, IFixedNature
 {
-    public int Generation => 9;
-    int ILocation.Location => Location;
+    public byte Generation => 9;
+    ushort ILocation.Location => Location;
     public const ushort Location = Locations.TeraCavern9;
     public EntityContext Context => EntityContext.Gen9;
     public GameVersion Version => GameVersion.SV;
     public bool IsDistribution => Index != 0;
     public Ball FixedBall => Ball.None;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public bool IsShiny => Shiny == Shiny.Always;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
 
     public required ushort Species { get; init; }
     public required byte Form { get; init; }
@@ -25,6 +24,7 @@ public sealed record EncounterDist9
     public required AbilityPermission Ability { get; init; }
     public required byte FlawlessIVCount { get; init; }
     public required Shiny Shiny { get; init; }
+    public required Nature Nature { get; init; }
     public required byte Level { get; init; }
     public required Moveset Moves { get; init; }
     public required IndividualValueSet IVs { get; init; }
@@ -217,7 +217,7 @@ public sealed record EncounterDist9
         RandRate3TotalScarlet = ReadUInt16LittleEndian(data[(WeightStart + (sizeof(ushort) * 14))..]),
         RandRate3TotalViolet  = ReadUInt16LittleEndian(data[(WeightStart + (sizeof(ushort) * 15))..]),
 
-        // 0x34 reserved
+        Nature = (Nature)data[0x34],
         IVs = new IndividualValueSet((sbyte)data[0x35], (sbyte)data[0x36], (sbyte)data[0x37], (sbyte)data[0x38], (sbyte)data[0x39], (sbyte)data[0x3A], (IndividualValueSetType)data[0x3B]),
         ScaleType = (SizeType9)data[0x3C],
         Scale = data[0x3D],
@@ -234,31 +234,29 @@ public sealed record EncounterDist9
     };
 
     #region Generating
-    PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria) => ConvertToPKM(tr, criteria);
-    PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr) => ConvertToPKM(tr);
     public PK9 ConvertToPKM(ITrainerInfo tr) => ConvertToPKM(tr, EncounterCriteria.Unrestricted);
     public PK9 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        var pi = PersonalTable.SV[Species, Form];
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
+        var pi = GetPersonal();
         var pk = new PK9
         {
-            Language = lang,
+            Language = language,
             Species = Species,
             Form = Form,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
-            Met_Location = Location,
-            Met_Level = LevelMin,
+            OriginalTrainerFriendship = pi.BaseFriendship,
+            MetLocation = Location,
+            MetLevel = LevelMin,
             MetDate = EncounterDate.GetDateSwitch(),
-            Version = (byte)version,
+            Version = version,
             Ball = (byte)Ball.Poke,
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
-            Obedience_Level = LevelMin,
-            OT_Name = tr.OT,
-            OT_Gender = tr.Gender,
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
+            ObedienceLevel = LevelMin,
+            OriginalTrainerName = tr.OT,
+            OriginalTrainerGender = tr.Gender,
             ID32 = tr.ID32,
         };
         SetPINGA(pk, criteria, pi);
@@ -268,25 +266,39 @@ public sealed record EncounterDist9
         return pk;
     }
 
-    private void SetPINGA(PK9 pk, EncounterCriteria criteria, PersonalInfo9SV pi)
+    private PersonalInfo9SV GetPersonal() => PersonalTable.SV[Species, Form];
+
+    private void SetPINGA(PK9 pk, in EncounterCriteria criteria, PersonalInfo9SV pi)
+    {
+        var param = GetParam(pi);
+        var init = Util.Rand.Rand64();
+        var success = this.TryApply32(pk, init, param, criteria);
+        if (!success && !this.TryApply32(pk, init, param, criteria.WithoutIVs()))
+            this.TryApply32(pk, init, param, EncounterCriteria.Unrestricted);
+    }
+
+    private GenerateParam9 GetParam(PersonalInfo9SV pi)
     {
         const byte rollCount = 1;
         const byte undefinedSize = 0;
-        var param = new GenerateParam9(Species, pi.Gender, FlawlessIVCount, rollCount,
+        return new GenerateParam9(Species, pi.Gender, FlawlessIVCount, rollCount,
             undefinedSize, undefinedSize, ScaleType, Scale,
-            Ability, Shiny, IVs: IVs);
+            Ability, Shiny, Nature, IVs: IVs);
+    }
 
-        var init = Util.Rand.Rand64();
-        var success = this.TryApply32(pk, init, param, criteria);
-        if (!success)
-            this.TryApply32(pk, init, param, EncounterCriteria.Unrestricted);
+    public bool GenerateSeed32(PKM pk, uint seed)
+    {
+        var pk9 = (PK9)pk;
+        var param = GetParam(GetPersonal());
+        Encounter9RNG.GenerateData(pk9, param, EncounterCriteria.Unrestricted, seed);
+        return true;
     }
     #endregion
 
     #region Matching
     public bool IsMatchExact(PKM pk, EvoCriteria evo)
     {
-        if (!this.IsLevelWithinRange(pk.Met_Level))
+        if (!this.IsLevelWithinRange(pk.MetLevel))
             return false;
         if (Gender != FixedGenderUtil.GenderRandom && pk.Gender != Gender)
             return false;
@@ -305,7 +317,7 @@ public sealed record EncounterDist9
     private bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : EggLocation;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private bool IsMatchLocation(PKM pk)
@@ -325,11 +337,11 @@ public sealed record EncounterDist9
         return IsMatchDeferred(pk);
     }
 
-    private bool IsMatchLocationExact(PKM pk) => pk.Met_Location == Location;
+    private static bool IsMatchLocationExact(PKM pk) => pk.MetLocation == Location;
 
-    private bool IsMatchLocationRemapped(PKM pk)
+    private static bool IsMatchLocationRemapped(PKM pk)
     {
-        var met = (ushort)pk.Met_Location;
+        var met = pk.MetLocation;
         var version = pk.Version;
         if (pk.Context == EntityContext.Gen8)
             return LocationsHOME.IsValidMetSV(met, version);
@@ -352,7 +364,14 @@ public sealed record EncounterDist9
             }
             else if (Ability.IsSingleValue(out int index) && 1 << index != num) // Fixed regular ability
             {
-                if (Ability is OnlyFirst or OnlySecond && !AbilityVerifier.CanAbilityCapsule(9, PersonalTable.SV.GetFormEntry(Species, Form)))
+                var a = Ability;
+                if (a is OnlyHidden)
+                {
+                    if (!AbilityVerifier.CanAbilityPatch(9, PersonalTable.SV.GetFormEntry(Species, Form), pk.Species))
+                        return DeferredErrors;
+                    a = num == 1 ? OnlyFirst : OnlySecond;
+                }
+                if (a is OnlyFirst or OnlySecond && !AbilityVerifier.CanAbilityCapsule(9, PersonalTable.SV.GetFormEntry(Species, Form)))
                     return DeferredErrors;
             }
         }
@@ -379,7 +398,7 @@ public sealed record EncounterDist9
             return true;
 
         var pi = PersonalTable.SV.GetFormEntry(Species, Form);
-        var param = new GenerateParam9(Species, pi.Gender, FlawlessIVCount, 1, 0, 0, ScaleType, Scale, Ability, Shiny, IVs: IVs);
+        var param = new GenerateParam9(Species, pi.Gender, FlawlessIVCount, 1, 0, 0, ScaleType, Scale, Ability, Shiny, Nature, IVs: IVs);
         if (!Encounter9RNG.IsMatch(pk, param, seed))
             return true;
 

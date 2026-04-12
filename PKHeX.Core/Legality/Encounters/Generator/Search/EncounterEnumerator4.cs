@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.Gen4"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen4"/>.
 /// </summary>
 public record struct EncounterEnumerator4(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -16,7 +16,7 @@ public record struct EncounterEnumerator4(PKM Entity, EvoCriteria[] Chain, GameV
     private bool Yielded;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     private bool mustBeSlot;
     private bool hasOriginalLocation;
 
@@ -98,14 +98,14 @@ public record struct EncounterEnumerator4(PKM Entity, EvoCriteria[] Chain, GameV
                 Index = 0; goto case YieldState.Bred;
 
             case YieldState.Bred:
-                if (!Locations.IsEggLocationBred4(Entity.Egg_Location, Version))
+                if (!Locations.IsEggLocationBred4(Entity.EggLocation, Version))
                     goto case YieldState.TradeStart;
                 if (!EncounterGenerator4.TryGetEgg(Chain, Version, out var egg))
                     goto case YieldState.TradeStart;
                 State = YieldState.BredSplit;
                 return SetCurrent(egg);
             case YieldState.BredSplit:
-                if (!EncounterGenerator4.TryGetSplit((EncounterEgg)Current.Encounter, Chain, out egg))
+                if (!EncounterGenerator4.TryGetSplit((EncounterEgg4)Current.Encounter, Chain, out egg))
                     goto case YieldState.TradeStart;
                 State = YieldState.TradeStart;
                 return SetCurrent(egg);
@@ -232,7 +232,7 @@ public record struct EncounterEnumerator4(PKM Entity, EvoCriteria[] Chain, GameV
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -241,8 +241,8 @@ public record struct EncounterEnumerator4(PKM Entity, EvoCriteria[] Chain, GameV
 
     private void InitializeWildLocationInfo()
     {
-        met = Entity.Met_Location;
-        mustBeSlot = Entity is { Egg_Location: 0, Ball: (int)Ball.Sport or (int)Ball.Safari }; // never static
+        met = Entity.MetLocation;
+        mustBeSlot = Entity is { EggLocation: 0, Ball: (int)Ball.Sport or (int)Ball.Safari }; // never static
         hasOriginalLocation = Entity.Format == 4;
     }
 

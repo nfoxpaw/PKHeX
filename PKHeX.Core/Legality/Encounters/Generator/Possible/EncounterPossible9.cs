@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.SV"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen9"/> encounters.
 /// </summary>
 public record struct EncounterPossible9(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -43,6 +43,7 @@ public record struct EncounterPossible9(EvoCriteria[] Chain, EncounterTypeGroup 
         StaticFixed,
         StaticTeraBase,
         StaticTeraDLC1,
+        StaticTeraDLC2,
         StaticDist,
         StaticOutbreak,
         StaticMight,
@@ -116,6 +117,10 @@ public record struct EncounterPossible9(EvoCriteria[] Chain, EncounterTypeGroup 
                 Index = 0; State = YieldState.StaticTeraDLC1; goto case YieldState.StaticTeraDLC1;
             case YieldState.StaticTeraDLC1:
                 if (TryGetNext(Encounters9.TeraDLC1))
+                    return true;
+                Index = 0; State = YieldState.StaticTeraDLC2; goto case YieldState.StaticTeraDLC2;
+            case YieldState.StaticTeraDLC2:
+                if (TryGetNext(Encounters9.TeraDLC2))
                     return true;
                 Index = 0; State = YieldState.StaticDist; goto case YieldState.StaticDist;
             case YieldState.StaticDist:

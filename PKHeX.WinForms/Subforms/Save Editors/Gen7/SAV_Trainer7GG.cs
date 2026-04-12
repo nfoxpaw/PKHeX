@@ -13,12 +13,12 @@ public partial class SAV_Trainer7GG : Form
     private readonly SAV7b SAV;
     private readonly GoParkStorage Park;
 
-    public SAV_Trainer7GG(SaveFile sav)
+    public SAV_Trainer7GG(SAV7b sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
         SAV = (SAV7b)(Origin = sav).Clone();
-        Park = new GoParkStorage(SAV);
+        Park = SAV.Park;
         UpdateGoSummary(0);
 
         if (Main.Unicode)
@@ -26,7 +26,7 @@ public partial class SAV_Trainer7GG : Form
             TB_OTName.Font = TB_RivalName.Font = FontUtil.GetPKXFont();
         }
 
-        B_MaxCash.Click += (sender, e) => MT_Money.Text = "9,999,999";
+        B_MaxCash.Click += (_, _) => MT_Money.Text = "9,999,999";
 
         GetComboBoxes();
         LoadTrainerInfo();
@@ -41,7 +41,7 @@ public partial class SAV_Trainer7GG : Form
             return;
         if (e.AllowedEffect == (DragDropEffects.Copy | DragDropEffects.Link)) // external file
             e.Effect = DragDropEffects.Copy;
-        else if (e.Data != null) // within
+        else if (e.Data is not null) // within
             e.Effect = DragDropEffects.Move;
     }
 
@@ -58,20 +58,20 @@ public partial class SAV_Trainer7GG : Form
         CB_Gender.Items.Clear();
         CB_Gender.Items.AddRange(Main.GenderSymbols.Take(2).ToArray()); // m/f depending on unicode selection
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
         CB_Game.InitializeBinding();
-        CB_Game.DataSource = new BindingSource(GameInfo.VersionDataSource.Where(z => GameVersion.Gen7b.Contains(z.Value)).ToList(), null);
+        CB_Game.DataSource = new BindingSource(GameInfo.Sources.VersionDataSource.Where(z => (GameVersion)z.Value is GameVersion.GP or GameVersion.GE).ToList(), string.Empty);
     }
 
     private void LoadTrainerInfo()
     {
         // Get Data
         TB_OTName.Text = SAV.OT;
-        TB_RivalName.Text = SAV.Blocks.Misc.Rival;
+        TB_RivalName.Text = SAV.Blocks.Misc.RivalName;
         CB_Language.SelectedValue = SAV.Language;
         MT_Money.Text = SAV.Blocks.Misc.Money.ToString();
 
-        CB_Game.SelectedValue = SAV.Game;
+        CB_Game.SelectedValue = (int)SAV.Version;
         CB_Gender.SelectedIndex = SAV.Gender;
         trainerID1.LoadIDValues(SAV, SAV.Generation);
 
@@ -93,6 +93,12 @@ public partial class SAV_Trainer7GG : Form
         MT_Hours.Text = SAV.PlayedHours.ToString();
         MT_Minutes.Text = SAV.PlayedMinutes.ToString();
         MT_Seconds.Text = SAV.PlayedSeconds.ToString();
+
+        CAL_AdventureBeginDate.Value = CAL_AdventureBeginTime.Value = SAV.PlayerGeoLocation.AdventureBegin.Timestamp;
+        if (SAV.Played.LastSavedDate is { } d)
+            CAL_LastSavedDate.Value = CAL_LastSavedTime.Value = d;
+        else
+            CAL_LastSavedDate.Enabled = CAL_LastSavedTime.Enabled = false;
     }
 
     private void Save()
@@ -102,14 +108,16 @@ public partial class SAV_Trainer7GG : Form
 
     private void SaveTrainerInfo()
     {
-        SAV.Game = WinFormsUtil.GetIndex(CB_Game);
+        SAV.Version = (GameVersion)WinFormsUtil.GetIndex(CB_Game);
         SAV.Gender = (byte)CB_Gender.SelectedIndex;
 
         SAV.Money = Util.ToUInt32(MT_Money.Text);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
 
-        SAV.OT = TB_OTName.Text;
-        SAV.Blocks.Misc.Rival = TB_RivalName.Text;
+        if (SAV.OT != TB_OTName.Text)
+            SAV.OT = TB_OTName.Text;
+        if (SAV.Blocks.Misc.RivalName != TB_RivalName.Text)
+            SAV.Blocks.Misc.RivalName = TB_RivalName.Text;
 
         // Copy Position
         if (GB_Map.Enabled && MapUpdated)
@@ -132,6 +140,10 @@ public partial class SAV_Trainer7GG : Form
         SAV.PlayedHours = ushort.Parse(MT_Hours.Text);
         SAV.PlayedMinutes = ushort.Parse(MT_Minutes.Text) % 60;
         SAV.PlayedSeconds = ushort.Parse(MT_Seconds.Text) % 60;
+
+        SAV.PlayerGeoLocation.AdventureBegin.Timestamp = CAL_AdventureBeginDate.Value.Date.AddSeconds(CAL_AdventureBeginTime.Value.TimeOfDay.TotalSeconds);
+        if (CAL_LastSavedDate.Enabled)
+            SAV.Played.LastSavedDate = CAL_LastSavedDate.Value.Date.AddSeconds(CAL_LastSavedTime.Value.TimeOfDay.TotalSeconds);
     }
 
     private void ClickString(object sender, MouseEventArgs e)
@@ -139,12 +151,11 @@ public partial class SAV_Trainer7GG : Form
         if (ModifierKeys != Keys.Control)
             return;
 
-        TextBox tb = sender as TextBox ?? TB_OTName;
+        if (sender is not TextBox tb)
+            return;
 
-        // Special Character Form
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        var trash = tb == TB_OTName ? SAV.Status.OriginalTrainerTrash : SAV.Misc.RivalNameTrash;
+        TrashEditor.Show(tb, SAV, trash);
     }
 
     private void B_Cancel_Click(object sender, EventArgs e)
@@ -180,7 +191,7 @@ public partial class SAV_Trainer7GG : Form
             return;
         }
         WinFormsUtil.SetClipboardText(string.Join(Environment.NewLine, summary));
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_ExportGoFiles_Click(object sender, EventArgs e)
@@ -197,22 +208,22 @@ public partial class SAV_Trainer7GG : Form
 
         var folder = fbd.SelectedPath;
         foreach (var gpk in gofiles)
-            File.WriteAllBytes(Path.Combine(folder, Util.CleanFileName(gpk.FileName)), gpk.Data);
+            File.WriteAllBytes(Path.Combine(folder, PathUtil.CleanFileName(gpk.FileName)), gpk.Data);
         WinFormsUtil.Alert($"Dumped {gofiles.Length} files to {folder}");
     }
 
     private void B_Import_Click(object sender, EventArgs e)
     {
-        using var sfd = new OpenFileDialog();
-        sfd.Filter = GoFilter;
-        sfd.FilterIndex = 0;
-        sfd.RestoreDirectory = true;
+        using var ofd = new OpenFileDialog();
+        ofd.Filter = GoFilter;
+        ofd.FilterIndex = 0;
+        ofd.RestoreDirectory = true;
 
         // Export
-        if (sfd.ShowDialog() != DialogResult.OK)
+        if (ofd.ShowDialog() != DialogResult.OK)
             return;
 
-        string path = sfd.FileName;
+        string path = ofd.FileName;
         ImportGP1From(path);
     }
 
@@ -233,7 +244,7 @@ public partial class SAV_Trainer7GG : Form
             return;
         }
         var gp1 = new GP1();
-        data.CopyTo(gp1.Data, 0);
+        data.CopyTo(gp1.Data);
         Park[index] = gp1;
         UpdateGoSummary((int)NUD_GoIndex.Value);
     }
@@ -285,7 +296,7 @@ public partial class SAV_Trainer7GG : Form
             ctr++;
         }
         UpdateGoSummary((int)NUD_GoIndex.Value);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void NUD_GoIndex_ValueChanged(object sender, EventArgs e) => UpdateGoSummary((int)NUD_GoIndex.Value);
@@ -310,7 +321,7 @@ public partial class SAV_Trainer7GG : Form
 
         Park.DeleteAll();
         UpdateGoSummary((int)NUD_GoIndex.Value);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_DeleteGo_Click(object sender, EventArgs e)
@@ -320,19 +331,19 @@ public partial class SAV_Trainer7GG : Form
         index = Math.Clamp(index, 0, max);
         Park[index] = new GP1();
         UpdateGoSummary((int)NUD_GoIndex.Value);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_AllTrainerTitles_Click(object sender, EventArgs e)
     {
         SAV.Blocks.EventWork.UnlockAllTitleFlags();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_AllFashionItems_Click(object sender, EventArgs e)
     {
         SAV.Blocks.FashionPlayer.UnlockAllAccessoriesPlayer();
         SAV.Blocks.FashionStarter.UnlockAllAccessoriesStarter();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 }

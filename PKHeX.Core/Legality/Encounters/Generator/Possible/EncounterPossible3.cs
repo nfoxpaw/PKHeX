@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.Gen3"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen3"/> encounters.
 /// </summary>
 public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -30,6 +30,8 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
         EventColoR,
         EventColoS,
         Event,
+        EventPCNY,
+        EventPCJP,
 
         TradeStart,
         TradeRS,
@@ -42,6 +44,7 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
         SlotR,
         SlotS,
         SlotE,
+        SwarmRSE,
         SlotFR,
         SlotLG,
         SlotEnd,
@@ -75,7 +78,7 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
                 State = YieldState.BredSplit;
                 return SetCurrent(egg);
             case YieldState.BredSplit:
-                if (!EncounterGenerator3.TryGetSplit((EncounterEgg)Current, Chain, out egg))
+                if (!EncounterGenerator3.TryGetSplit((EncounterEgg3)Current, Chain, out egg))
                     goto case YieldState.EventStart;
                 State = YieldState.EventStart;
                 return SetCurrent(egg);
@@ -94,6 +97,14 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
                 Index = 0; State = YieldState.Event; goto case YieldState.Event;
             case YieldState.Event:
                 if (TryGetNextEvent(EncountersWC3.Encounter_WC3))
+                    return true;
+                Index = 0; State = YieldState.EventPCNY; goto case YieldState.EventPCNY;
+            case YieldState.EventPCNY:
+                if (TryGetNextEvent(EncountersWC3.PCNY))
+                    return true;
+                Index = 0; State = YieldState.EventPCJP; goto case YieldState.EventPCJP;
+            case YieldState.EventPCJP:
+                if (TryGetNextEvent(EncountersWC3.PCJP))
                     return true;
                 Index = 0; goto case YieldState.TradeStart;
 
@@ -188,18 +199,24 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
                 if (Version == GameVersion.LG)
                 { State = YieldState.SlotLG; goto case YieldState.SlotLG; }
                 throw new ArgumentOutOfRangeException(nameof(Version));
+
             case YieldState.SlotR:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsR))
                     return true;
-                Index = 0; goto case YieldState.SlotEnd;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
             case YieldState.SlotS:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsS))
                     return true;
-                Index = 0; goto case YieldState.SlotEnd;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
             case YieldState.SlotE:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsE))
                     return true;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
+            case YieldState.SwarmRSE:
+                if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsSwarmRSE))
+                    return true;
                 Index = 0; goto case YieldState.SlotEnd;
+
             case YieldState.SlotFR:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3FRLG.SlotsFR))
                     return true;
@@ -208,6 +225,7 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3FRLG.SlotsLG))
                     return true;
                 Index = 0; goto case YieldState.SlotEnd;
+
             case YieldState.SlotEnd:
                 break;
         }
@@ -242,7 +260,7 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
         return false;
     }
 
-    private bool TryGetNextEvent(WC3[] db)
+    private bool TryGetNextEvent<T>(T[] db) where T : IEncounterable, IEncounterMatch
     {
         for (; Index < db.Length;)
         {
@@ -253,8 +271,6 @@ public record struct EncounterPossible3(EvoCriteria[] Chain, EncounterTypeGroup 
             {
                 if (evo.Species != enc.Species)
                     continue;
-                if (enc.NotDistributed)
-                    break;
                 return SetCurrent(enc);
             }
         }

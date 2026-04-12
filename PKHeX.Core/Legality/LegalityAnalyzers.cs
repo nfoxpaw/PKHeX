@@ -25,6 +25,7 @@ internal static class LegalityAnalyzers
     public static readonly HistoryVerifier History = new();
     public static readonly ContestStatVerifier Contest = new();
     public static readonly MarkingVerifier Marking = new();
+    public static readonly MovePPVerifier MovePP = new();
 
     public static readonly TrainerNameVerifier Trainer = new();
     public static readonly TrainerIDVerifier TrainerID = new();
@@ -32,6 +33,7 @@ internal static class LegalityAnalyzers
     public static readonly MiscVerifier MiscValues = new();
     public static readonly TransferVerifier Transfer = new();
     public static readonly MarkVerifier Mark = new();
-    public static readonly LegendsArceusVerifier Arceus = new();
     public static readonly AwakenedValueVerifier Awakening = new();
+    public static readonly TrashByteVerifier Trash = new();
+    public static readonly SlotTypeVerifier SlotType = new();
 }

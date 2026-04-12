@@ -7,13 +7,14 @@ namespace PKHeX.Core;
 /// Generation 8 Static Encounter
 /// </summary>
 public sealed record EncounterStatic8b(GameVersion Version)
-    : IEncounterable, IEncounterMatch, IEncounterConvertible<PB8>, IFlawlessIVCount, IFatefulEncounterReadOnly, IStaticCorrelation8b
+    : IEncounterable, IEncounterMatch, IEncounterConvertible<PB8>,
+        IFlawlessIVCount, IFatefulEncounterReadOnly, IStaticCorrelation8b, IGenerateSeed32
 {
-    public int Generation => 8;
+    public byte Generation => 8;
     public EntityContext Context => EntityContext.Gen8b;
-    int ILocation.EggLocation => EggLocation;
-    int ILocation.Location => Location;
-    public bool EggEncounter => EggLocation != None;
+    ushort ILocation.EggLocation => EggLocation;
+    ushort ILocation.Location => Location;
+    public bool IsEgg => EggLocation != None;
     private const ushort None = Locations.Default8bNone;
     public byte Form => 0;
     public bool IsShiny => Shiny == Shiny.Always;
@@ -26,7 +27,7 @@ public sealed record EncounterStatic8b(GameVersion Version)
     public required byte Level { get; init; }
     public Ball FixedBall { get; init; }
     public byte FlawlessIVCount { get; init; }
-    public bool Roaming { get; init; }
+    public bool IsRoaming { get; init; }
     public AbilityPermission Ability { get; init; }
     public Shiny Shiny { get; init; }
     public bool FatefulEncounter { get; init; }
@@ -34,7 +35,7 @@ public sealed record EncounterStatic8b(GameVersion Version)
     public string Name => "Static Encounter";
     public string LongName => Name;
 
-    public StaticCorrelation8bRequirement GetRequirement(PKM pk) => Roaming
+    public StaticCorrelation8bRequirement GetRequirement(PKM pk) => IsRoaming
         ? MustHave
         : MustNotHave;
 
@@ -44,12 +45,12 @@ public sealed record EncounterStatic8b(GameVersion Version)
     }
 
     // defined by mvpoke in encounter data
-    private static ReadOnlySpan<ushort> Roaming_MetLocation_BDSP => new ushort[]
-    {
+    private static ReadOnlySpan<ushort> RoamingLocations =>
+    [
         197, 201, 354, 355, 356, 357, 358, 359, 361, 362, 364, 365, 367, 373, 375, 377,
         378, 379, 383, 385, 392, 394, 395, 397, 400, 403, 404, 407,
         485,
-    };
+    ];
 
     #region Generating
 
@@ -60,50 +61,48 @@ public sealed record EncounterStatic8b(GameVersion Version)
 
     public PB8 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.BDSP[Species, Form];
         var pk = new PB8
         {
             Species = Species,
             CurrentLevel = Level,
-            Met_Location = Location,
-            Egg_Location = EggLocation,
-            Met_Level = Level,
+            MetLocation = Location,
+            EggLocation = EggLocation,
+            MetLevel = Level,
             MetDate = EncounterDate.GetDateSwitch(),
             Ball = (byte)(FixedBall != Ball.None ? FixedBall : Ball.Poke),
             FatefulEncounter = FatefulEncounter,
 
             ID32 = tr.ID32,
-            Version = (byte)version,
-            Language = lang,
-            OT_Gender = tr.Gender,
-            OT_Name = tr.OT,
-            OT_Friendship = pi.BaseFriendship,
+            Version = version,
+            Language = language,
+            OriginalTrainerGender = tr.Gender,
+            OriginalTrainerName = tr.OT,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
-            HeightScalar = PokeSizeUtil.GetRandomScalar(),
-            WeightScalar = PokeSizeUtil.GetRandomScalar(),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
 
-        if (EggEncounter)
+        if (IsEgg)
         {
             // Fake as hatched.
-            pk.Met_Location = Locations.HatchLocation8b;
-            pk.Met_Level = EggStateLegality.EggMetLevel;
-            pk.Egg_Location = EggLocation;
+            pk.MetLocation = Locations.HatchLocation8b;
+            pk.MetLevel = EggStateLegality.EggMetLevel;
+            pk.EggLocation = EggLocation;
             pk.EggMetDate = pk.MetDate;
         }
 
         SetPINGA(pk, criteria);
 
-        EncounterUtil1.SetEncounterMoves(pk, version, Level);
+        EncounterUtil.SetEncounterMoves(pk, version, Level);
         pk.ResetPartyStats();
 
         return pk;
     }
 
-    private void SetPINGA(PB8 pk, EncounterCriteria criteria)
+    private void SetPINGA(PB8 pk, in EncounterCriteria criteria)
     {
         var req = GetRequirement(pk);
         if (req == MustHave) // Roamers
@@ -118,6 +117,19 @@ public sealed record EncounterStatic8b(GameVersion Version)
         }
     }
 
+    public bool GenerateSeed32(PKM pk, uint seed)
+    {
+        if (!IsRoaming)
+            return false;
+        if (pk is not PB8 pb8)
+            throw new ArgumentException($"{nameof(pk)} must be a {nameof(PB8)} instance.", nameof(pk));
+
+        var criteria = EncounterCriteria.Unrestricted;
+        var shiny = Shiny == Shiny.Random ? Shiny.FixedValue : Shiny;
+        Roaming8bRNG.TryApplyFromSeed(pb8, criteria, shiny, FlawlessIVCount, seed);
+        return true;
+    }
+
     #endregion
 
     #region Matching
@@ -126,7 +138,7 @@ public sealed record EncounterStatic8b(GameVersion Version)
 
     public bool IsMatchExact(PKM pk, EvoCriteria evo)
     {
-        if (pk.Met_Level != Level)
+        if (pk.MetLevel != Level)
             return false;
         if (!IsMatchLocation(pk))
             return false;
@@ -151,33 +163,33 @@ public sealed record EncounterStatic8b(GameVersion Version)
 
     private bool IsMatchLocationExact(PKM pk)
     {
-        if (EggEncounter)
-            return !pk.IsEgg || pk.Met_Location == Location || pk.Met_Location == Locations.LinkTrade6NPC;
-        if (!Roaming)
-            return pk.Met_Location == Location;
+        if (IsEgg)
+            return !pk.IsEgg || pk.MetLocation == Location || pk.MetLocation == Locations.LinkTrade6NPC;
+        if (!IsRoaming)
+            return pk.MetLocation == Location;
         return IsRoamingLocation(pk);
     }
 
     private bool IsMatchEggLocationExact(PKM pk)
     {
-        var eggloc = pk.Egg_Location;
-        if (!EggEncounter)
-            return eggloc == EggLocation;
+        var eggLoc = pk.EggLocation;
+        if (!IsEgg)
+            return eggLoc == EggLocation;
 
         if (!pk.IsEgg) // hatched
-            return eggloc == EggLocation || eggloc == Locations.LinkTrade6NPC;
+            return eggLoc == EggLocation || eggLoc == Locations.LinkTrade6NPC;
 
         // Unhatched:
-        if (eggloc != EggLocation)
+        if (eggLoc != EggLocation)
             return false;
-        if (pk.Met_Location is not (Locations.Default8bNone or Locations.LinkTrade6NPC))
+        if (pk.MetLocation is not (Locations.Default8bNone or Locations.LinkTrade6NPC))
             return false;
         return true;
     }
 
     private bool IsMatchLocationRemapped(PKM pk)
     {
-        var met = (ushort)pk.Met_Location;
+        var met = pk.MetLocation;
         var version = pk.Version;
         if (pk.Context == EntityContext.Gen8)
             return LocationsHOME.IsValidMetBDSP(met, version);
@@ -197,12 +209,12 @@ public sealed record EncounterStatic8b(GameVersion Version)
 
     private bool IsMatchEggLocationRemapped(PKM pk)
     {
-        if (!EggEncounter)
-            return pk.Egg_Location == 0;
-        return LocationsHOME.IsLocationSWSHEgg(pk.Version, pk.Met_Location, pk.Egg_Location, EggLocation);
+        if (!IsEgg)
+            return pk.EggLocation == 0;
+        return LocationsHOME.IsLocationSWSHEgg(pk.Version, pk.MetLocation, pk.EggLocation, EggLocation);
     }
 
-    private static bool IsRoamingLocation(PKM pk) => Roaming_MetLocation_BDSP.Contains((ushort)pk.Met_Location);
+    private static bool IsRoamingLocation(PKM pk) => RoamingLocations.Contains(pk.MetLocation);
 
     #endregion
 }

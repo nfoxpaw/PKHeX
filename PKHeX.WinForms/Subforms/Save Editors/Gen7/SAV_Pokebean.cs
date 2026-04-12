@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 using PKHeX.Core;
 
@@ -6,7 +6,10 @@ namespace PKHeX.WinForms;
 
 public partial class SAV_Pokebean : Form
 {
-    public SAV_Pokebean(SaveFile sav)
+    private readonly SaveFile Origin;
+    private readonly SAV7 SAV;
+
+    public SAV_Pokebean(SAV7 sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
@@ -15,9 +18,6 @@ public partial class SAV_Pokebean : Form
         InitializeGrid();
         LoadValues();
     }
-
-    private readonly SaveFile Origin;
-    private readonly SAV7 SAV;
 
     private void LoadValues()
     {
@@ -62,14 +62,14 @@ public partial class SAV_Pokebean : Form
     {
         SAV.ResortSave.FillBeans();
         LoadValues();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_None_Click(object sender, EventArgs e)
     {
         SAV.ResortSave.ClearBeans();
         LoadValues();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_Save_Click(object sender, EventArgs e)

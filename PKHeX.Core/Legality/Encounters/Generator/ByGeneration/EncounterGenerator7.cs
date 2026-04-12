@@ -7,17 +7,18 @@ namespace PKHeX.Core;
 public sealed class EncounterGenerator7 : IEncounterGenerator
 {
     public static readonly EncounterGenerator7 Instance = new();
+    public bool CanGenerateEggs => true;
 
-    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
+    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion version, EncounterTypeGroup groups)
     {
-        var iterator = new EncounterPossible7(chain, groups, game);
+        var iterator = new EncounterPossible7(chain, groups, version);
         foreach (var enc in iterator)
             yield return enc;
     }
 
     public IEnumerable<IEncounterable> GetEncounters(PKM pk, EvoCriteria[] chain, LegalInfo info)
     {
-        var iterator = new EncounterEnumerator7(pk, chain, (GameVersion)pk.Version);
+        var iterator = new EncounterEnumerator7(pk, chain, pk.Version);
         foreach (var enc in iterator)
             yield return enc.Encounter;
     }
@@ -25,7 +26,7 @@ public sealed class EncounterGenerator7 : IEncounterGenerator
     internal static EncounterTransfer7 GetVCStaticTransferEncounter(PKM pk, ushort encSpecies, ReadOnlySpan<EvoCriteria> chain)
     {
         // Obtain the lowest evolution species with matching OT friendship. Not all species chains have the same base friendship.
-        var met = (byte)pk.Met_Level;
+        var met = pk.MetLevel;
         if (pk.VC1)
         {
             // Only yield a VC1 template if it could originate in VC1.
@@ -43,7 +44,7 @@ public sealed class EncounterGenerator7 : IEncounterGenerator
     }
 
     /// <summary>
-    /// Get the most devolved species that matches the <see cref="pk"/> <see cref="PKM.OT_Friendship"/>.
+    /// Get the most devolved species that matches the <see cref="pk"/> <see cref="PKM.OriginalTrainerFriendship"/>.
     /// </summary>
     private static ushort GetVCSpecies(ReadOnlySpan<EvoCriteria> chain, PKM pk, ushort maxSpecies)
     {
@@ -54,18 +55,18 @@ public sealed class EncounterGenerator7 : IEncounterGenerator
                 continue;
             if (evo.Form != 0)
                 continue;
-            if (PersonalTable.SM.GetFormEntry(evo.Species, evo.Form).BaseFriendship != pk.OT_Friendship)
+            if (PersonalTable.SM.GetFormEntry(evo.Species, evo.Form).BaseFriendship != pk.OriginalTrainerFriendship)
                 continue;
             return evo.Species;
         }
         return pk.Species;
     }
 
-    private const int Generation = 7;
+    private const byte Generation = 7;
     private const EntityContext Context = EntityContext.Gen7;
     private const byte EggLevel = EggStateLegality.EggMetLevel;
 
-    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetEgg(ReadOnlySpan<EvoCriteria> chain, GameVersion version, [NotNullWhen(true)] out EncounterEgg7? result)
     {
         result = null;
         var devolved = chain[^1];
@@ -91,9 +92,9 @@ public sealed class EncounterGenerator7 : IEncounterGenerator
         return true;
     }
 
-    public static EncounterEgg MutateEggTrade(EncounterEgg egg) => egg with { Version = GetOtherGamePair(egg.Version) };
+    public static EncounterEgg7 MutateEggTrade(EncounterEgg7 egg) => egg with { Version = GetOtherGamePair(egg.Version) };
 
-    public static bool TryGetSplit(EncounterEgg other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg? result)
+    public static bool TryGetSplit(EncounterEgg7 other, ReadOnlySpan<EvoCriteria> chain, [NotNullWhen(true)] out EncounterEgg7? result)
     {
         result = null;
         // Check for split-breed
@@ -118,14 +119,16 @@ public sealed class EncounterGenerator7 : IEncounterGenerator
         // 32 -> 30 (US -> SN)
         // 33 -> 31 (UM -> MN)
         // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
+#pragma warning disable RCS1130, RCS1257 // Bitwise operation on enum without Flags attribute.
         return version ^ (GameVersion)0b111110;
+#pragma warning restore
     }
 
-    private static EncounterEgg CreateEggEncounter(ushort species, byte form, GameVersion version)
+    private static EncounterEgg7 CreateEggEncounter(ushort species, byte form, GameVersion version)
     {
         if (FormInfo.IsBattleOnlyForm(species, form, Generation) || species is (int)Species.Rotom or (int)Species.Castform)
             form = FormInfo.GetOutOfBattleForm(species, form, Generation);
-        return new EncounterEgg(species, form, EggLevel, Generation, version, Context);
+        return new EncounterEgg7(species, form, version);
     }
 
     private static (ushort Species, byte Form) GetBaby(EvoCriteria lowest)

@@ -30,7 +30,7 @@ public partial class MoveChoice : UserControl
         }
 
         var type = MoveInfo.GetType((ushort)value, Context);
-        PB_Type.Image = TypeSpriteUtil.GetTypeSpriteIcon(type);
+        PB_Type.Image = TypeSpriteUtil.GetTypeSpriteIconSmall(type);
     }
 
     private static void LoadClamp(ComboBox cb, int value)
@@ -57,7 +57,10 @@ public partial class MoveChoice : UserControl
     public void HealPP(PKM pk)
     {
         var move = SelectedMove;
-        PP = move <= 0 ? (PPUps = 0) : pk.GetMovePP(move, PPUps);
+        var up = PPUps;
+        if (move == 0)
+            PPUps = up = 0;
+        PP = pk.GetMovePP(move, up);
     }
 
     private void CB_Move_SelectedIndexChanged(object sender, EventArgs e)

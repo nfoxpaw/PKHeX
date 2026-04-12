@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using PKHeX.Core;
@@ -169,7 +169,7 @@ public partial class SAV_Poffin8b : Form
 
     private byte SetPoffinName(string value)
     {
-        var index = Array.IndexOf(ItemNames, value);
+        var index = ItemNames.IndexOf(value);
         if (index != -1)
             return (byte)(index - 1);
         return unchecked((byte)-1);
@@ -186,14 +186,14 @@ public partial class SAV_Poffin8b : Form
             item.MstID = SetPoffinName(cells[1].Value?.ToString() ?? "");
             item.Level = Parse(cells[2]);
             item.Taste = Parse(cells[3]);
-            item.IsNew = (bool)cells[4].Value;
+            item.IsNew = (bool)cells[4].Value!;
             item.FlavorSpicy = Parse(cells[5]);
             item.FlavorDry = Parse(cells[6]);
             item.FlavorSweet = Parse(cells[7]);
             item.FlavorBitter = Parse(cells[8]);
             item.FlavorSour = Parse(cells[9]);
 
-            static byte Parse(DataGridViewCell c) => (byte)(byte.TryParse(c.Value.ToString(), out var p) ? p : 0);
+            static byte Parse(DataGridViewCell c) => (byte)(byte.TryParse(c.Value!.ToString(), out var p) ? p : 0);
         }
     }
 
@@ -212,7 +212,7 @@ public partial class SAV_Poffin8b : Form
             poffin.FlavorSpicy = poffin.FlavorBitter = poffin.FlavorDry = poffin.FlavorSour = poffin.FlavorSweet = 0xFF;
         }
         LoadItems(AllItems);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_None_Click(object sender, EventArgs e)
@@ -220,7 +220,7 @@ public partial class SAV_Poffin8b : Form
         foreach (var poffin in AllItems)
             poffin.ToNull();
         LoadItems(AllItems);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_Save_Click(object sender, EventArgs e)

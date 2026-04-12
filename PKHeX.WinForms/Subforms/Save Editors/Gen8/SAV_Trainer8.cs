@@ -10,7 +10,7 @@ public partial class SAV_Trainer8 : Form
     private readonly SaveFile Origin;
     private readonly SAV8SWSH SAV;
 
-    public SAV_Trainer8(SaveFile sav)
+    public SAV_Trainer8(SAV8SWSH sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
@@ -21,8 +21,8 @@ public partial class SAV_Trainer8 : Form
             TB_OTName.Font = TB_TrainerCardName.Font = FontUtil.GetPKXFont();
         }
 
-        B_MaxCash.Click += (sender, e) => MT_Money.Text = SAV.MaxMoney.ToString();
-        B_MaxWatt.Click += (sender, e) => MT_Watt.Text = MyStatus8.MaxWatt.ToString();
+        B_MaxCash.Click += (_, _) => MT_Money.Text = SAV.MaxMoney.ToString();
+        B_MaxWatt.Click += (_, _) => MT_Watt.Text = MyStatus8.MaxWatt.ToString();
 
         CB_Gender.Items.Clear();
         CB_Gender.Items.AddRange(Main.GenderSymbols.Take(2).ToArray()); // m/f depending on unicode selection
@@ -36,6 +36,7 @@ public partial class SAV_Trainer8 : Form
 
         ChangeTitleScreenIndex(this, EventArgs.Empty);
         ChangeTrainerCardIndex(this, EventArgs.Empty);
+        CB_Fashion.SelectedIndex = 1;
 
         if (SAV.SaveRevision == 0)
             B_CollectDiglett.Visible = false;
@@ -49,13 +50,17 @@ public partial class SAV_Trainer8 : Form
     private void GetComboBoxes()
     {
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
+
+        CB_SkinColor.Items.Clear();
+        CB_SkinColor.Items.AddRange(WinFormsTranslator.GetEnumTranslation<PlayerSkinColor8>(Main.CurrentLanguage));
+        CB_SkinColor.SelectedIndex = (int)PlayerSkinColor8Extensions.GetSkinColorFromSkin(SAV.MyStatus.Skin);
     }
 
     private void GetTextBoxes()
     {
         // Get Data
-        CB_Game.SelectedIndex = SAV.Game - (int)GameVersion.SW;
+        CB_Game.SelectedIndex = SAV.Version - GameVersion.SW;
         CB_Gender.SelectedIndex = SAV.Gender;
 
         // Display Data
@@ -88,15 +93,21 @@ public partial class SAV_Trainer8 : Form
         MT_Minutes.Text = SAV.PlayedMinutes.ToString();
         MT_Seconds.Text = SAV.PlayedSeconds.ToString();
 
-        //if (SAV.Played.LastSavedDate.HasValue)
-        //{
-        //    CAL_LastSavedDate.Value = SAV.Played.LastSavedDate.Value;
-        //    CAL_LastSavedTime.Value = SAV.Played.LastSavedDate.Value;
-        //}
-        //else
-        //{
-        L_LastSaved.Visible = CAL_LastSavedDate.Visible = CAL_LastSavedTime.Visible = false;
-        //}
+        if (SAV.Played.LastSavedDate.HasValue)
+        {
+            try
+            {
+                CAL_LastSavedDate.Value = CAL_LastSavedTime.Value = SAV.Played.LastSavedDate.Value;
+            }
+            catch
+            {
+                DisableSaved();
+            }
+        }
+        else
+        {
+            DisableSaved();
+        }
 
         CAL_AdventureStartTime.Visible = false;
         CAL_AdventureStartDate.Value = new DateTime(SAV.TrainerCard.StartedYear, SAV.TrainerCard.StartedMonth, SAV.TrainerCard.StartedDay);
@@ -105,6 +116,11 @@ public partial class SAV_Trainer8 : Form
         // DateUtil.GetDateTime2000(SAV.SecondsToFame, out date, out time);
         // CAL_HoFDate.Value = date;
         // CAL_HoFTime.Value = time;
+    }
+
+    private void DisableSaved()
+    {
+        L_LastSaved.Visible = CAL_LastSavedDate.Visible = CAL_LastSavedTime.Visible = false;
     }
 
     private void GetMiscValues()
@@ -136,13 +152,18 @@ public partial class SAV_Trainer8 : Form
 
     private void SaveTrainerInfo()
     {
-        SAV.Game = (byte)(CB_Game.SelectedIndex + (int)GameVersion.SW);
+        SAV.Version = (GameVersion)(CB_Game.SelectedIndex + (int)GameVersion.SW);
         SAV.Gender = (byte)CB_Gender.SelectedIndex;
 
         SAV.Money = Util.ToUInt32(MT_Money.Text);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
-        SAV.OT = TB_OTName.Text;
-        SAV.Blocks.TrainerCard.OT = TB_TrainerCardName.Text;
+
+        // only modify if changed (preserve trash bytes?)
+        if (SAV.OT != TB_OTName.Text)
+            SAV.OT = TB_OTName.Text;
+        if (SAV.Blocks.TrainerCard.OT != TB_TrainerCardName.Text)
+            SAV.Blocks.TrainerCard.OT = TB_TrainerCardName.Text;
+
         SAV.Blocks.MyStatus.Number = SAV.Blocks.TrainerCard.Number = TB_TrainerCardNumber.Text;
         SAV.Blocks.TrainerCard.TrainerID = Util.ToInt32(MT_TrainerCardID.Text);
         SAV.Blocks.TrainerCard.RotoRallyScore = Util.ToInt32(MT_RotoRally.Text);
@@ -181,21 +202,20 @@ public partial class SAV_Trainer8 : Form
         SAV.TrainerCard.StartedDay = (byte)CAL_AdventureStartDate.Value.Day;
 
         //SAV.SecondsToFame = (uint)DateUtil.GetSecondsFrom2000(CAL_HoFDate.Value, CAL_HoFTime.Value);
-        //
-        //if (SAV.Played.LastSavedDate.HasValue)
-        //    SAV.Played.LastSavedDate = new DateTime(CAL_LastSavedDate.Value.Year, CAL_LastSavedDate.Value.Month, CAL_LastSavedDate.Value.Day, CAL_LastSavedTime.Value.Hour, CAL_LastSavedTime.Value.Minute, 0);
+
+        if (SAV.Played.LastSavedDate.HasValue)
+            SAV.Played.LastSavedDate = CAL_LastSavedDate.Value.Date.AddMinutes(CAL_LastSavedTime.Value.TimeOfDay.TotalMinutes);
     }
 
     private void ClickOT(object sender, MouseEventArgs e)
     {
-        TextBox tb = sender as TextBox ?? TB_OTName;
+        if (sender is not TextBox tb)
+            return;
         // Special Character Form
         if (ModifierKeys != Keys.Control)
             return;
-
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        var trash = tb == TB_OTName ? SAV.MyStatus.OriginalTrainerTrash : SAV.Blocks.TrainerCard.OriginalTrainerTrash;
+        TrashEditor.Show(tb, SAV, trash);
     }
 
     private void B_Cancel_Click(object sender, EventArgs e)
@@ -238,20 +258,74 @@ public partial class SAV_Trainer8 : Form
     private void B_CopyFromPartyToTrainerCard_Click(object sender, EventArgs e)
     {
         SAV.Blocks.TrainerCard.SetPartyData();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         ChangeTrainerCardIndex(this, EventArgs.Empty);
     }
 
     private void B_CopyFromPartyToTitleScreen_Click(object sender, EventArgs e)
     {
         SAV.Blocks.TitleScreen.SetPartyData();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         ChangeTitleScreenIndex(this, EventArgs.Empty);
+    }
+
+    private void CB_Gender_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (SAV.Gender != (byte)CB_Gender.SelectedIndex)
+        {
+            SAV.Gender = SAV.MyStatus.GenderAppearance = (byte)CB_Gender.SelectedIndex;
+            ResetAppearance();
+        }
+    }
+
+    private void CB_SkinColor_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        SAV.MyStatus.SetSkinColor((PlayerSkinColor8)CB_SkinColor.SelectedIndex);
+    }
+
+    private void B_Fashion_Click(object sender, EventArgs e)
+    {
+        var prompt = WinFormsUtil.Prompt(MessageBoxButtons.YesNo, "Modifying Fashion Items will clear existing fashion unlock data.", "Continue?");
+        if (DialogResult.Yes != prompt)
+            return;
+
+        // Clear Block
+        SAV.Fashion.Clear();
+
+        // Write Payload
+        switch (CB_Fashion.SelectedIndex)
+        {
+            case 0: // Base Fashion
+                SAV.Fashion.Reset();
+                break;
+            case 1: // Full Legal
+                SAV.Fashion.UnlockAllLegal();
+                break;
+            case 2: // Everything
+                SAV.Fashion.UnlockAll();
+                break;
+            default:
+                return;
+        }
+        WinFormsUtil.Asterisk();
+    }
+
+    private void ResetAppearance()
+    {
+        var index = (CB_SkinColor.SelectedIndex & ~0x1) | (CB_Gender.SelectedIndex & 1);
+        CB_SkinColor.SelectedIndex = index;
+        SAV.MyStatus.ResetAppearance((PlayerSkinColor8)index);
+        WinFormsUtil.Alert("Trainer appearance has been reset.");
+    }
+
+    private void B_ResetAppearance_Click(object sender, EventArgs e)
+    {
+        ResetAppearance();
     }
 
     private void B_GetAllDiglett_Click(object sender, EventArgs e)
     {
         SAV.UnlockAllDiglett();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 }

@@ -1133,3 +1133,10 @@ Focolare
 Fondamenta
 Pregiata
 Eccezionale
+Teracristal
+Astrale
+Media
+Piccola
+Grande
+Gigante
+Mega Z

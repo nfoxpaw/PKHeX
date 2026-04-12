@@ -51,7 +51,7 @@ public static class HoneyTreeUtil
         }
     }
 
-    // There aren't any RNG considerations for Munchlax/etc encounter slot legality.
+    // There aren't any RNG considerations for Munchlax/etc. encounter slot legality.
     // The RNG calls for populating the tree are disjointed from the RNG calls for generating the Entity upon encounter.
     // Group -> Slot -> Shakes
 
@@ -60,11 +60,12 @@ public static class HoneyTreeUtil
     /// </summary>
     /// <param name="seed">Current RNG state seed of the game.</param>
     /// <param name="isMunchlaxTree">If the tree is a "rare" tree based on <see cref="CalculateMunchlaxTrees"/>.</param>"/>
+    /// <remarks><see cref="GameVersion.DPPt"/></remarks>
     public static (HoneyTreeSlotGroup Group, int Slot, int Shakes) GetHoneyTreeResult(uint seed, bool isMunchlaxTree)
     {
-        var randGroup = LCRNG.Next16(ref seed) % 100;
-        var randSlot = LCRNG.Next16(ref seed) % 100;
-        var randShakes = LCRNG.Next16(ref seed) % 100;
+        var randGroup  = LCRNG.Next16(ref seed) / 656;
+        var randSlot   = LCRNG.Next16(ref seed) / 656;
+        var randShakes = LCRNG.Next16(ref seed) / 656;
 
         var group = GetHoneyTreeGroup(randGroup, isMunchlaxTree);
         var slot = GetHoneyTreeSlotIndex(randSlot);

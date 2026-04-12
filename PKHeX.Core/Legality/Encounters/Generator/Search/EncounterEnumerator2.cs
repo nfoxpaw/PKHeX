@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.Gen2"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen2"/>.
 /// </summary>
 public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -18,7 +18,7 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
     private YieldState State;
     private readonly PKM Entity;
     private readonly EvoCriteria[] Chain;
-    private readonly int met;
+    private readonly ushort met;
     private readonly bool hasOriginalMet;
     private readonly bool canOriginateCrystal;
 
@@ -27,16 +27,23 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
         Entity = pk;
         Chain = chain;
 
-        if (pk is ICaughtData2 { CaughtData: not 0 } c2)
+        if (pk.Korean)
+            return;
+
+        if (pk is not ICaughtData2 c2)
         {
             canOriginateCrystal = true;
-            hasOriginalMet = true;
-            met = c2.Met_Location;
+            return;
         }
-        else
+        if (c2.CaughtData == 0)
         {
-            canOriginateCrystal = pk is { Format: >= 7, Korean: false } || pk.CanInhabitGen1();
+            canOriginateCrystal = GBRestrictions.CanVisitGen1(chain[0].Species); // can visit & wipe met
+            return;
         }
+
+        canOriginateCrystal = true;
+        hasOriginalMet = true;
+        met = c2.MetLocation;
     }
 
     readonly object IEnumerator.Current => Current;
@@ -96,7 +103,7 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
                 goto case YieldState.StaticStart;
             case YieldState.BredCrystal:
                 State = YieldState.StaticStart;
-                if (EncounterGenerator2.TryGetEggCrystal(Entity, (EncounterEgg)Current.Encounter, out egg))
+                if (EncounterGenerator2.TryGetEggCrystal(Entity, (EncounterEgg2)Current.Encounter, out egg))
                     return SetCurrent(egg);
                 goto case YieldState.StaticStart;
 
@@ -116,7 +123,7 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
             case YieldState.StaticC:
                 if (TryGetNext(Encounters2.StaticC))
                     return true;
-                if (hasOriginalMet || Entity.OT_Gender == 1)
+                if (hasOriginalMet || Entity.OriginalTrainerGender == 1)
                 { Index = 0; State = YieldState.StaticShared; goto case YieldState.StaticShared; }
                 Index = 0; State = YieldState.StaticGD; goto case YieldState.StaticGD;
             case YieldState.StaticGD:
@@ -143,7 +150,7 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
             case YieldState.SlotC:
                 if (TryGetNextLocation<EncounterArea2, EncounterSlot2>(Encounters2.SlotsC))
                     return true;
-                if (hasOriginalMet || Entity.OT_Gender == 1)
+                if (hasOriginalMet || Entity.OriginalTrainerGender == 1)
                 { Index = 0; goto case YieldState.SlotEnd; }
                 Index = 0; State = YieldState.SlotGD; goto case YieldState.SlotGD;
             case YieldState.SlotGD:
@@ -171,13 +178,13 @@ public record struct EncounterEnumerator2 : IEnumerator<MatchedEncounter<IEncoun
                     return SetCurrent(Encounters2.CelebiVC);
                 goto case YieldState.Fallback;
             case YieldState.EventGB:
-                if (TryGetNext(Encounters2GBEra.StaticEventsGB))
+                if (TryGetNext(Encounters2GBEra.Gifts))
                     return true;
                 State = YieldState.Fallback; goto case YieldState.Fallback;
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }

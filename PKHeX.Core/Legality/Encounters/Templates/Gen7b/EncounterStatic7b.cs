@@ -6,12 +6,12 @@ namespace PKHeX.Core;
 public sealed record EncounterStatic7b(GameVersion Version)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<PB7>, IFlawlessIVCount, IFixedIVSet
 {
-    public int Generation => 7;
+    public byte Generation => 7;
     public EntityContext Context => EntityContext.Gen7b;
-    int ILocation.Location => Location;
-    public int EggLocation => 0;
+    ushort ILocation.Location => Location;
+    public ushort EggLocation => 0;
     public bool IsShiny => false;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
 
     public required ushort Species { get; init; }
     public required byte Level { get; init; }
@@ -34,46 +34,51 @@ public sealed record EncounterStatic7b(GameVersion Version)
     public PB7 ConvertToPKM(ITrainerInfo tr) => ConvertToPKM(tr, EncounterCriteria.Unrestricted);
     public PB7 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.GG[Species, Form];
+        var date = EncounterDate.GetDateSwitch();
         var pk = new PB7
         {
             Species = Species,
             Form = Form,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
-            Met_Location = Location,
-            Met_Level = LevelMin,
-            Version = (byte)version,
-            MetDate = EncounterDate.GetDateSwitch(),
+            OriginalTrainerFriendship = pi.BaseFriendship,
+            MetLocation = Location,
+            MetLevel = LevelMin,
+            Version = version,
+            MetDate = date,
             Ball = (byte)Ball.Poke,
 
-            HeightScalar = PokeSizeUtil.GetRandomScalar(),
-            WeightScalar = PokeSizeUtil.GetRandomScalar(),
-
-            Language = lang,
-            OT_Name = tr.OT,
-            OT_Gender = tr.Gender,
+            Language = language,
+            OriginalTrainerName = tr.OT,
+            OriginalTrainerGender = tr.Gender,
             ID32 = tr.ID32,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
+
+            ReceivedDate = date,
+            ReceivedTime = EncounterDate.GetTime(),
         };
         SetPINGA(pk, criteria, pi);
         pk.ResetHeight();
         pk.ResetWeight();
         pk.ResetCP();
-        EncounterUtil1.SetEncounterMoves(pk, Version, LevelMin);
+        EncounterUtil.SetEncounterMoves(pk, Version, LevelMin);
         pk.ResetPartyStats();
         return pk;
     }
 
-    private void SetPINGA(PB7 pk, EncounterCriteria criteria, PersonalInfo7GG pi)
+    private void SetPINGA(PB7 pk, in EncounterCriteria criteria, PersonalInfo7GG pi)
     {
-        pk.PID = Util.Rand32();
-        pk.EncryptionConstant = Util.Rand32();
-        pk.Nature = (int)criteria.GetNature();
+        var rnd = Util.Rand;
+        pk.PID = EncounterUtil.GetRandomPID(pk, rnd, Shiny, criteria.Shiny);
+        pk.EncryptionConstant = rnd.Rand32();
+        pk.Nature = criteria.GetNature();
         pk.Gender = criteria.GetGender(pi);
         pk.RefreshAbility(criteria.GetAbilityFromNumber(Ability));
+
+        pk.HeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
+        pk.WeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
 
         if (IVs.IsSpecified)
             criteria.SetRandomIVs(pk, IVs);
@@ -88,13 +93,15 @@ public sealed record EncounterStatic7b(GameVersion Version)
     {
         if (!IsMatchEggLocation(pk))
             return false;
-        if (pk.Met_Location != Location)
+        if (pk.MetLocation != Location)
             return false;
-        if (pk.Met_Level != Level)
+        if (pk.MetLevel != Level)
             return false;
         if (Form != evo.Form && !FormInfo.IsFormChangeable(Species, Form, pk.Form, Context, pk.Context))
             return false;
         if (FlawlessIVCount != 0 && pk.FlawlessIVCount < FlawlessIVCount)
+            return false;
+        if (IVs.IsSpecified && !Legal.GetIsFixedIVSequenceValidNoRand(IVs, pk))
             return false;
         return true;
     }
@@ -102,7 +109,7 @@ public sealed record EncounterStatic7b(GameVersion Version)
     private bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : EggLocation;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
     #endregion
 }

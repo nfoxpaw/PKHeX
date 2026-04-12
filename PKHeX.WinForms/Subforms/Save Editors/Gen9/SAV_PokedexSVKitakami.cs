@@ -29,17 +29,17 @@ public partial class SAV_PokedexSVKitakami : Form
         CB_Species.Items.Clear();
 
         var empty = new string[32];
-        foreach (ref var x in empty.AsSpan())
-            x = string.Empty;
+        empty.AsSpan().Fill(string.Empty);
         CLB_FormSeen.Items.AddRange(empty);
         CLB_FormObtained.Items.AddRange(empty);
         CLB_FormHeard.Items.AddRange(empty);
         CLB_FormViewed.Items.AddRange(empty);
 
         // Fill List
+        var source = GameInfo.FilteredSources;
         CB_Species.InitializeBinding();
-        var species = GameInfo.SpeciesDataSource.Where(z => SAV.Personal.IsSpeciesInGame((ushort)z.Value)).ToArray();
-        CB_Species.DataSource = new BindingSource(species, null);
+        var species = source.Species;
+        CB_Species.DataSource = new BindingSource(species, string.Empty);
 
         var list = species
             .Select(z => new DexMap(z))
@@ -157,7 +157,6 @@ public partial class SAV_PokedexSVKitakami : Form
         if (forms[0].Length == 0)
             forms[0] = GameInfo.Strings.Types[0];
 
-        this.SuspendLayout();
         // Clear all CheckedListBoxes
         var seen = CLB_FormSeen.Items;
         var obtained = CLB_FormObtained.Items;
@@ -237,8 +236,7 @@ public partial class SAV_PokedexSVKitakami : Form
     private static string[] GetFormList(in ushort species)
     {
         var s = GameInfo.Strings;
-        if (species == (int)Species.Alcremie)
-            return FormConverter.GetAlcremieFormList(s.forms);
+        // Alcremie: formarg-forms are not stored in bitflags; shown by default. No need for special handling for Alcremie.
         return FormConverter.GetFormList(species, s.Types, s.forms, GameInfo.GenderSymbolASCII, EntityContext.Gen9);
     }
 
@@ -304,7 +302,7 @@ public partial class SAV_PokedexSVKitakami : Form
         bool shiny = ModifierKeys == Keys.Shift;
         var species = GetSpecies(lastIndex);
         Dex.SetDexEntryAll(species, shiny);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 
@@ -319,7 +317,7 @@ public partial class SAV_PokedexSVKitakami : Form
         var species = GetSpecies(lastIndex);
         SetEntry(species);
         Dex.SeenNone();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 
@@ -329,7 +327,7 @@ public partial class SAV_PokedexSVKitakami : Form
         SetEntry(species);
         bool shiny = ModifierKeys == Keys.Shift;
         Dex.SeenAll(shiny);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 
@@ -338,7 +336,7 @@ public partial class SAV_PokedexSVKitakami : Form
         var species = GetSpecies(lastIndex);
         SetEntry(species);
         Dex.CaughtNone();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 
@@ -348,7 +346,7 @@ public partial class SAV_PokedexSVKitakami : Form
         SetEntry(species);
         bool shiny = ModifierKeys == Keys.Shift;
         Dex.CaughtAll(shiny);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 
@@ -358,7 +356,7 @@ public partial class SAV_PokedexSVKitakami : Form
         SetEntry(species);
         bool shiny = ModifierKeys == Keys.Shift;
         Dex.CompleteDex(shiny);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
         GetEntry(species);
     }
 }

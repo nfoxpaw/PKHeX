@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.Gen4"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen4"/> encounters.
 /// </summary>
 public record struct EncounterPossible4(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version, PKM Entity) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -72,7 +72,7 @@ public record struct EncounterPossible4(EvoCriteria[] Chain, EncounterTypeGroup 
                 return SetCurrent(egg);
             case YieldState.BredSplit:
                 State = YieldState.EventStart;
-                if (EncounterGenerator4.TryGetSplit((EncounterEgg)Current, Chain, out egg))
+                if (EncounterGenerator4.TryGetSplit((EncounterEgg4)Current, Chain, out egg))
                     return SetCurrent(egg);
                 goto case YieldState.EventStart;
 
@@ -222,7 +222,7 @@ public record struct EncounterPossible4(EvoCriteria[] Chain, EncounterTypeGroup 
         for (; Index < db.Length;)
         {
             var enc = db[Index++];
-            if (!enc.CanBeReceivedByVersion((int)Version))
+            if (!enc.CanBeReceivedByVersion(Version))
                 continue;
             foreach (var evo in Chain)
             {

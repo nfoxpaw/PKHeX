@@ -1,14 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.BDSP"/> encounters while in the <see cref="PK8"/> format.
+/// Iterates to find potentially matched encounters for <see cref="EncounterEnumerator8b"/> encounters while in the <see cref="PK8"/> format.
 /// </summary>
-public record struct EncounterEnumerator8bSWSH(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
+public record struct EncounterEnumerator8bSWSH(PK8 Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
     private IEncounterable? Deferred;
     private int Index;
@@ -17,7 +16,7 @@ public record struct EncounterEnumerator8bSWSH(PKM Entity, EvoCriteria[] Chain, 
     private bool Yielded;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     private bool hasOriginalLocation;
     private bool mustBeWild;
     readonly object IEnumerator.Current => Current;
@@ -56,7 +55,6 @@ public record struct EncounterEnumerator8bSWSH(PKM Entity, EvoCriteria[] Chain, 
         switch (State)
         {
             case YieldState.Start:
-                Debug.Assert(Entity is PK8);
                 if (Chain.Length == 0)
                     break;
 
@@ -79,7 +77,7 @@ public record struct EncounterEnumerator8bSWSH(PKM Entity, EvoCriteria[] Chain, 
                 State = YieldState.BredSplit;
                 return SetCurrent(egg);
             case YieldState.BredSplit:
-                if (!EncounterGenerator8b.TryGetSplit((EncounterEgg)Current.Encounter, Chain, out egg))
+                if (!EncounterGenerator8b.TryGetSplit((EncounterEgg8b)Current.Encounter, Chain, out egg))
                     goto case YieldState.TradeStart;
                 State = YieldState.End;
                 return SetCurrent(egg);
@@ -143,32 +141,30 @@ public record struct EncounterEnumerator8bSWSH(PKM Entity, EvoCriteria[] Chain, 
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
-            case YieldState.End:
-                return false;
         }
         return false;
     }
 
-    private readonly bool WasBredEggBDSP() => Entity.Met_Level == EggStateLegality.EggMetLevel && Entity.Egg_Location switch
+    private readonly bool WasBredEggBDSP() => Entity.MetLevel == EggStateLegality.EggMetLevel && Entity.EggLocation switch
     {
         LocationsHOME.SWSHEgg => true, // Regular hatch location (not link trade)
-        LocationsHOME.SWBD => Entity.Met_Location == LocationsHOME.SWBD, // Link Trade transferred over must match Met Location
-        LocationsHOME.SHSP => Entity.Met_Location == LocationsHOME.SHSP, // Link Trade transferred over must match Met Location
+        LocationsHOME.SWBD => Entity.MetLocation == LocationsHOME.SWBD, // Link Trade transferred over must match Met Location
+        LocationsHOME.SHSP => Entity.MetLocation == LocationsHOME.SHSP, // Link Trade transferred over must match Met Location
         _ => false,
     };
 
     private void InitializeWildLocationInfo()
     {
         mustBeWild = Entity.Ball == (byte)Ball.Safari;
-        met = Entity.Met_Location;
+        met = Entity.MetLocation;
         var location = met;
         var remap = LocationsHOME.GetRemapState(EntityContext.Gen8b, Entity.Context);
         hasOriginalLocation = true;
         if (remap.HasFlag(LocationRemapState.Remapped))
-            hasOriginalLocation = location != LocationsHOME.GetMetSWSH((ushort)location, (int)Version);
+            hasOriginalLocation = location != LocationsHOME.GetMetSWSH(location, Version);
     }
 
     private bool TryGetNext<TArea, TSlot>(TArea[] areas)

@@ -1,4 +1,4 @@
-﻿
+
 Saphir
 Rubin
 Smaragd
@@ -14,7 +14,7 @@ Platin
 
 
 Kolosseum/XD
-
+Battle Revolution
 
 
 
@@ -50,3 +50,5 @@ Strahlender Diamant
 Leuchtende Perle
 Karmesin
 Purpur
+Legenden: Z-A
+Champions

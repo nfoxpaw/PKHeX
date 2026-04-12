@@ -13,7 +13,7 @@ namespace PKHeX.WinForms.Controls
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing && (components is not null))
             {
                 components.Dispose();
             }
@@ -32,8 +32,14 @@ namespace PKHeX.WinForms.Controls
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             tabBoxMulti = new System.Windows.Forms.TabControl();
             Tab_Box = new System.Windows.Forms.TabPage();
+            B_PopoutBox = new System.Windows.Forms.Button();
+            PopoutMenu = new System.Windows.Forms.ContextMenuStrip(components);
+            Menu_PopoutBoxSingle = new System.Windows.Forms.ToolStripMenuItem();
+            Menu_PopoutBoxAll = new System.Windows.Forms.ToolStripMenuItem();
+            B_SearchBox = new System.Windows.Forms.Button();
             Box = new BoxEditor();
             Tab_PartyBattle = new System.Windows.Forms.TabPage();
             SL_Party = new PartyEditor();
@@ -69,7 +75,8 @@ namespace PKHeX.WinForms.Controls
             B_OpenSuperTraining = new System.Windows.Forms.Button();
             B_OpenHallofFame = new System.Windows.Forms.Button();
             B_OUTPasserby = new System.Windows.Forms.Button();
-            B_CGearSkin = new System.Windows.Forms.Button();
+            B_DLC = new System.Windows.Forms.Button();
+            B_Donuts = new System.Windows.Forms.Button();
             B_OpenPokeBeans = new System.Windows.Forms.Button();
             B_CellsStickers = new System.Windows.Forms.Button();
             B_OpenMiscEditor = new System.Windows.Forms.Button();
@@ -79,36 +86,34 @@ namespace PKHeX.WinForms.Controls
             B_OpenUGSEditor = new System.Windows.Forms.Button();
             B_OpenGeonetEditor = new System.Windows.Forms.Button();
             B_OpenUnityTowerEditor = new System.Windows.Forms.Button();
+            B_OpenChatterEditor = new System.Windows.Forms.Button();
             B_Roamer = new System.Windows.Forms.Button();
             B_FestivalPlaza = new System.Windows.Forms.Button();
             B_MailBox = new System.Windows.Forms.Button();
             B_OpenApricorn = new System.Windows.Forms.Button();
             B_Raids = new System.Windows.Forms.Button();
-            B_RaidArmor = new System.Windows.Forms.Button();
-            B_RaidCrown = new System.Windows.Forms.Button();
-            B_RaidKitakami = new System.Windows.Forms.Button();
+            B_RaidsDLC1 = new System.Windows.Forms.Button();
+            B_RaidsDLC2 = new System.Windows.Forms.Button();
             B_Blocks = new System.Windows.Forms.Button();
             B_OtherSlots = new System.Windows.Forms.Button();
             B_OpenSealStickers = new System.Windows.Forms.Button();
             B_Poffins = new System.Windows.Forms.Button();
             B_RaidsSevenStar = new System.Windows.Forms.Button();
+            B_OpenBattlePass = new System.Windows.Forms.Button();
+            B_OpenGear = new System.Windows.Forms.Button();
+            B_OpenFashion = new System.Windows.Forms.Button();
             FLP_SAVToolsMisc = new System.Windows.Forms.FlowLayoutPanel();
             B_SaveBoxBin = new System.Windows.Forms.Button();
             B_VerifyCHK = new System.Windows.Forms.Button();
             B_VerifySaveEntities = new System.Windows.Forms.Button();
             Menu_ExportBAK = new System.Windows.Forms.Button();
             B_JPEG = new System.Windows.Forms.Button();
+            B_ConvertKorean = new System.Windows.Forms.Button();
             CB_SaveSlot = new System.Windows.Forms.ComboBox();
             L_SaveSlot = new System.Windows.Forms.Label();
-            L_Secure2 = new System.Windows.Forms.Label();
-            TB_Secure2 = new System.Windows.Forms.TextBox();
-            L_Secure1 = new System.Windows.Forms.Label();
-            TB_Secure1 = new System.Windows.Forms.TextBox();
-            L_GameSync = new System.Windows.Forms.Label();
-            TB_GameSync = new System.Windows.Forms.TextBox();
-            B_ConvertKorean = new System.Windows.Forms.Button();
             tabBoxMulti.SuspendLayout();
             Tab_Box.SuspendLayout();
+            PopoutMenu.SuspendLayout();
             Tab_PartyBattle.SuspendLayout();
             Tab_Other.SuspendLayout();
             GB_Daycare.SuspendLayout();
@@ -135,18 +140,69 @@ namespace PKHeX.WinForms.Controls
             tabBoxMulti.DragOver += MultiDragOver;
             tabBoxMulti.MouseClick += ClickBoxSort;
             tabBoxMulti.MouseDoubleClick += ClickBoxDouble;
+            tabBoxMulti.MouseDown += TabMouseDown;
+            tabBoxMulti.MouseMove += TabMouseMove;
+            tabBoxMulti.MouseUp += TabMouseUp;
             // 
             // Tab_Box
             // 
             Tab_Box.AllowDrop = true;
+            Tab_Box.Controls.Add(B_PopoutBox);
+            Tab_Box.Controls.Add(B_SearchBox);
             Tab_Box.Controls.Add(Box);
-            Tab_Box.Location = new System.Drawing.Point(4, 24);
+            Tab_Box.Location = new System.Drawing.Point(4, 26);
             Tab_Box.Name = "Tab_Box";
             Tab_Box.Padding = new System.Windows.Forms.Padding(3);
-            Tab_Box.Size = new System.Drawing.Size(441, 335);
+            Tab_Box.Size = new System.Drawing.Size(441, 333);
             Tab_Box.TabIndex = 0;
             Tab_Box.Text = "Box";
             Tab_Box.UseVisualStyleBackColor = true;
+            // 
+            // B_PopoutBox
+            // 
+            B_PopoutBox.ContextMenuStrip = PopoutMenu;
+            B_PopoutBox.Image = Properties.Resources.popout;
+            B_PopoutBox.Location = new System.Drawing.Point(3, 15);
+            B_PopoutBox.Margin = new System.Windows.Forms.Padding(0);
+            B_PopoutBox.Name = "B_PopoutBox";
+            B_PopoutBox.Size = new System.Drawing.Size(24, 24);
+            B_PopoutBox.TabIndex = 3;
+            B_PopoutBox.UseVisualStyleBackColor = true;
+            B_PopoutBox.Click += B_PopoutBox_Click;
+            // 
+            // PopoutMenu
+            // 
+            PopoutMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { Menu_PopoutBoxSingle, Menu_PopoutBoxAll });
+            PopoutMenu.Name = "PopoutMenu";
+            PopoutMenu.Size = new System.Drawing.Size(137, 48);
+            // 
+            // Menu_PopoutBoxSingle
+            // 
+            Menu_PopoutBoxSingle.Image = Properties.Resources.open;
+            Menu_PopoutBoxSingle.Name = "Menu_PopoutBoxSingle";
+            Menu_PopoutBoxSingle.Size = new System.Drawing.Size(136, 22);
+            Menu_PopoutBoxSingle.Text = "Single Box";
+            Menu_PopoutBoxSingle.Click += Menu_PopoutBoxSingle_Click;
+            // 
+            // Menu_PopoutBoxAll
+            // 
+            Menu_PopoutBoxAll.Image = Properties.Resources.database;
+            Menu_PopoutBoxAll.Name = "Menu_PopoutBoxAll";
+            Menu_PopoutBoxAll.Size = new System.Drawing.Size(136, 22);
+            Menu_PopoutBoxAll.Text = "All Boxes";
+            Menu_PopoutBoxAll.Click += Menu_PopoutBoxAll_Click;
+            // 
+            // B_SearchBox
+            // 
+            B_SearchBox.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
+            B_SearchBox.Image = Properties.Resources.other;
+            B_SearchBox.Location = new System.Drawing.Point(414, 15);
+            B_SearchBox.Margin = new System.Windows.Forms.Padding(0);
+            B_SearchBox.Name = "B_SearchBox";
+            B_SearchBox.Size = new System.Drawing.Size(24, 24);
+            B_SearchBox.TabIndex = 2;
+            B_SearchBox.UseVisualStyleBackColor = true;
+            B_SearchBox.Click += B_SearchBox_Click;
             // 
             // Box
             // 
@@ -158,20 +214,20 @@ namespace PKHeX.WinForms.Controls
             Box.CurrentBox = -1;
             Box.Editor = null;
             Box.FlagIllegal = false;
-            Box.Location = new System.Drawing.Point(99, 7);
+            Box.Location = new System.Drawing.Point(107, 19);
             Box.M = null;
             Box.Name = "Box";
-            Box.Size = new System.Drawing.Size(251, 185);
+            Box.Size = new System.Drawing.Size(251, 187);
             Box.TabIndex = 1;
             // 
             // Tab_PartyBattle
             // 
             Tab_PartyBattle.AllowDrop = true;
             Tab_PartyBattle.Controls.Add(SL_Party);
-            Tab_PartyBattle.Location = new System.Drawing.Point(4, 24);
+            Tab_PartyBattle.Location = new System.Drawing.Point(4, 26);
             Tab_PartyBattle.Name = "Tab_PartyBattle";
             Tab_PartyBattle.Padding = new System.Windows.Forms.Padding(3);
-            Tab_PartyBattle.Size = new System.Drawing.Size(441, 335);
+            Tab_PartyBattle.Size = new System.Drawing.Size(441, 333);
             Tab_PartyBattle.TabIndex = 1;
             Tab_PartyBattle.Text = "Party";
             Tab_PartyBattle.UseVisualStyleBackColor = true;
@@ -191,9 +247,9 @@ namespace PKHeX.WinForms.Controls
             Tab_Other.Controls.Add(SL_Extra);
             Tab_Other.Controls.Add(GB_Daycare);
             Tab_Other.Controls.Add(L_ReadOnlyOther);
-            Tab_Other.Location = new System.Drawing.Point(4, 24);
+            Tab_Other.Location = new System.Drawing.Point(4, 26);
             Tab_Other.Name = "Tab_Other";
-            Tab_Other.Size = new System.Drawing.Size(441, 335);
+            Tab_Other.Size = new System.Drawing.Size(441, 333);
             Tab_Other.TabIndex = 2;
             Tab_Other.Text = "Other";
             Tab_Other.UseVisualStyleBackColor = true;
@@ -205,7 +261,7 @@ namespace PKHeX.WinForms.Controls
             SL_Extra.Location = new System.Drawing.Point(337, 0);
             SL_Extra.Name = "SL_Extra";
             SL_Extra.SAV = null;
-            SL_Extra.Size = new System.Drawing.Size(104, 335);
+            SL_Extra.Size = new System.Drawing.Size(104, 333);
             SL_Extra.TabIndex = 30;
             SL_Extra.ViewIndex = -1;
             // 
@@ -252,7 +308,7 @@ namespace PKHeX.WinForms.Controls
             TB_Daycare2XP.Location = new System.Drawing.Point(120, 104);
             TB_Daycare2XP.Name = "TB_Daycare2XP";
             TB_Daycare2XP.ReadOnly = true;
-            TB_Daycare2XP.Size = new System.Drawing.Size(73, 23);
+            TB_Daycare2XP.Size = new System.Drawing.Size(73, 25);
             TB_Daycare2XP.TabIndex = 15;
             // 
             // TB_Daycare1XP
@@ -260,7 +316,7 @@ namespace PKHeX.WinForms.Controls
             TB_Daycare1XP.Location = new System.Drawing.Point(120, 40);
             TB_Daycare1XP.Name = "TB_Daycare1XP";
             TB_Daycare1XP.ReadOnly = true;
-            TB_Daycare1XP.Size = new System.Drawing.Size(73, 23);
+            TB_Daycare1XP.Size = new System.Drawing.Size(73, 25);
             TB_Daycare1XP.TabIndex = 14;
             // 
             // L_DC2
@@ -268,7 +324,7 @@ namespace PKHeX.WinForms.Controls
             L_DC2.AutoSize = true;
             L_DC2.Location = new System.Drawing.Point(80, 88);
             L_DC2.Name = "L_DC2";
-            L_DC2.Size = new System.Drawing.Size(19, 15);
+            L_DC2.Size = new System.Drawing.Size(22, 17);
             L_DC2.TabIndex = 13;
             L_DC2.Text = "2: ";
             // 
@@ -277,7 +333,7 @@ namespace PKHeX.WinForms.Controls
             L_DC1.AutoSize = true;
             L_DC1.Location = new System.Drawing.Point(80, 24);
             L_DC1.Name = "L_DC1";
-            L_DC1.Size = new System.Drawing.Size(19, 15);
+            L_DC1.Size = new System.Drawing.Size(22, 17);
             L_DC1.TabIndex = 12;
             L_DC1.Text = "1: ";
             // 
@@ -292,7 +348,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // TB_RNGSeed
             // 
-            TB_RNGSeed.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            TB_RNGSeed.Font = new System.Drawing.Font("Courier New", 8.25F);
             TB_RNGSeed.Location = new System.Drawing.Point(64, 168);
             TB_RNGSeed.MaxLength = 16;
             TB_RNGSeed.Name = "TB_RNGSeed";
@@ -327,7 +383,7 @@ namespace PKHeX.WinForms.Controls
             DayCare_HasEgg.Enabled = false;
             DayCare_HasEgg.Location = new System.Drawing.Point(64, 146);
             DayCare_HasEgg.Name = "DayCare_HasEgg";
-            DayCare_HasEgg.Size = new System.Drawing.Size(97, 19);
+            DayCare_HasEgg.Size = new System.Drawing.Size(106, 21);
             DayCare_HasEgg.TabIndex = 7;
             DayCare_HasEgg.Text = "Egg Available";
             DayCare_HasEgg.UseVisualStyleBackColor = true;
@@ -348,15 +404,9 @@ namespace PKHeX.WinForms.Controls
             Tab_SAV.Controls.Add(FLP_SAVToolsMisc);
             Tab_SAV.Controls.Add(CB_SaveSlot);
             Tab_SAV.Controls.Add(L_SaveSlot);
-            Tab_SAV.Controls.Add(L_Secure2);
-            Tab_SAV.Controls.Add(TB_Secure2);
-            Tab_SAV.Controls.Add(L_Secure1);
-            Tab_SAV.Controls.Add(TB_Secure1);
-            Tab_SAV.Controls.Add(L_GameSync);
-            Tab_SAV.Controls.Add(TB_GameSync);
-            Tab_SAV.Location = new System.Drawing.Point(4, 24);
+            Tab_SAV.Location = new System.Drawing.Point(4, 26);
             Tab_SAV.Name = "Tab_SAV";
-            Tab_SAV.Size = new System.Drawing.Size(441, 335);
+            Tab_SAV.Size = new System.Drawing.Size(441, 333);
             Tab_SAV.TabIndex = 3;
             Tab_SAV.Text = "SAV";
             Tab_SAV.UseVisualStyleBackColor = true;
@@ -379,7 +429,8 @@ namespace PKHeX.WinForms.Controls
             FLP_SAVtools.Controls.Add(B_OpenSuperTraining);
             FLP_SAVtools.Controls.Add(B_OpenHallofFame);
             FLP_SAVtools.Controls.Add(B_OUTPasserby);
-            FLP_SAVtools.Controls.Add(B_CGearSkin);
+            FLP_SAVtools.Controls.Add(B_DLC);
+            FLP_SAVtools.Controls.Add(B_Donuts);
             FLP_SAVtools.Controls.Add(B_OpenPokeBeans);
             FLP_SAVtools.Controls.Add(B_CellsStickers);
             FLP_SAVtools.Controls.Add(B_OpenMiscEditor);
@@ -389,21 +440,24 @@ namespace PKHeX.WinForms.Controls
             FLP_SAVtools.Controls.Add(B_OpenUGSEditor);
             FLP_SAVtools.Controls.Add(B_OpenGeonetEditor);
             FLP_SAVtools.Controls.Add(B_OpenUnityTowerEditor);
+            FLP_SAVtools.Controls.Add(B_OpenChatterEditor);
             FLP_SAVtools.Controls.Add(B_Roamer);
             FLP_SAVtools.Controls.Add(B_FestivalPlaza);
             FLP_SAVtools.Controls.Add(B_MailBox);
             FLP_SAVtools.Controls.Add(B_OpenApricorn);
             FLP_SAVtools.Controls.Add(B_Raids);
-            FLP_SAVtools.Controls.Add(B_RaidArmor);
-            FLP_SAVtools.Controls.Add(B_RaidCrown);
-            FLP_SAVtools.Controls.Add(B_RaidKitakami);
+            FLP_SAVtools.Controls.Add(B_RaidsDLC1);
+            FLP_SAVtools.Controls.Add(B_RaidsDLC2);
             FLP_SAVtools.Controls.Add(B_Blocks);
             FLP_SAVtools.Controls.Add(B_OtherSlots);
             FLP_SAVtools.Controls.Add(B_OpenSealStickers);
             FLP_SAVtools.Controls.Add(B_Poffins);
             FLP_SAVtools.Controls.Add(B_RaidsSevenStar);
+            FLP_SAVtools.Controls.Add(B_OpenBattlePass);
+            FLP_SAVtools.Controls.Add(B_OpenGear);
+            FLP_SAVtools.Controls.Add(B_OpenFashion);
             FLP_SAVtools.Dock = System.Windows.Forms.DockStyle.Bottom;
-            FLP_SAVtools.Location = new System.Drawing.Point(0, 175);
+            FLP_SAVtools.Location = new System.Drawing.Point(0, 173);
             FLP_SAVtools.Margin = new System.Windows.Forms.Padding(0);
             FLP_SAVtools.Name = "FLP_SAVtools";
             FLP_SAVtools.Size = new System.Drawing.Size(441, 160);
@@ -539,13 +593,13 @@ namespace PKHeX.WinForms.Controls
             B_OpenPokepuffs.Name = "B_OpenPokepuffs";
             B_OpenPokepuffs.Size = new System.Drawing.Size(96, 32);
             B_OpenPokepuffs.TabIndex = 1;
-            B_OpenPokepuffs.Text = "‎Poké Puffs";
+            B_OpenPokepuffs.Text = "Poké Puffs";
             B_OpenPokepuffs.UseVisualStyleBackColor = true;
             B_OpenPokepuffs.Click += B_OpenPokepuffs_Click;
             // 
             // B_OpenSuperTraining
             // 
-            B_OpenSuperTraining.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            B_OpenSuperTraining.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F);
             B_OpenSuperTraining.Location = new System.Drawing.Point(4, 124);
             B_OpenSuperTraining.Margin = new System.Windows.Forms.Padding(4);
             B_OpenSuperTraining.Name = "B_OpenSuperTraining";
@@ -564,7 +618,7 @@ namespace PKHeX.WinForms.Controls
             B_OpenHallofFame.TabIndex = 1;
             B_OpenHallofFame.Text = "Hall of Fame";
             B_OpenHallofFame.UseVisualStyleBackColor = true;
-            B_OpenHallofFame.Click += B_OUTHallofFame_Click;
+            B_OpenHallofFame.Click += B_HallofFame_Click;
             // 
             // B_OUTPasserby
             // 
@@ -577,31 +631,42 @@ namespace PKHeX.WinForms.Controls
             B_OUTPasserby.UseVisualStyleBackColor = true;
             B_OUTPasserby.Click += B_OUTPasserby_Click;
             // 
-            // B_CGearSkin
+            // B_DLC
             // 
-            B_CGearSkin.Location = new System.Drawing.Point(316, 124);
-            B_CGearSkin.Margin = new System.Windows.Forms.Padding(4);
-            B_CGearSkin.Name = "B_CGearSkin";
-            B_CGearSkin.Size = new System.Drawing.Size(96, 32);
-            B_CGearSkin.TabIndex = 1;
-            B_CGearSkin.Text = "C-Gear Skin";
-            B_CGearSkin.UseVisualStyleBackColor = true;
-            B_CGearSkin.Click += B_CGearSkin_Click;
+            B_DLC.Location = new System.Drawing.Point(316, 124);
+            B_DLC.Margin = new System.Windows.Forms.Padding(4);
+            B_DLC.Name = "B_DLC";
+            B_DLC.Size = new System.Drawing.Size(96, 32);
+            B_DLC.TabIndex = 1;
+            B_DLC.Text = "DLC I/O";
+            B_DLC.UseVisualStyleBackColor = true;
+            B_DLC.Click += B_DLC_Click;
+            // 
+            // B_Donuts
+            // 
+            B_Donuts.Location = new System.Drawing.Point(4, 164);
+            B_Donuts.Margin = new System.Windows.Forms.Padding(4);
+            B_Donuts.Name = "B_Donuts";
+            B_Donuts.Size = new System.Drawing.Size(96, 32);
+            B_Donuts.TabIndex = 11;
+            B_Donuts.Text = "Donuts";
+            B_Donuts.UseVisualStyleBackColor = true;
+            B_Donuts.Click += B_Donuts_Click;
             // 
             // B_OpenPokeBeans
             // 
-            B_OpenPokeBeans.Location = new System.Drawing.Point(4, 164);
+            B_OpenPokeBeans.Location = new System.Drawing.Point(108, 164);
             B_OpenPokeBeans.Margin = new System.Windows.Forms.Padding(4);
             B_OpenPokeBeans.Name = "B_OpenPokeBeans";
             B_OpenPokeBeans.Size = new System.Drawing.Size(96, 32);
             B_OpenPokeBeans.TabIndex = 1;
-            B_OpenPokeBeans.Text = "‎Poké Beans";
+            B_OpenPokeBeans.Text = "Poké Beans";
             B_OpenPokeBeans.UseVisualStyleBackColor = true;
             B_OpenPokeBeans.Click += B_OpenPokeBeans_Click;
             // 
             // B_CellsStickers
             // 
-            B_CellsStickers.Location = new System.Drawing.Point(108, 164);
+            B_CellsStickers.Location = new System.Drawing.Point(212, 164);
             B_CellsStickers.Margin = new System.Windows.Forms.Padding(4);
             B_CellsStickers.Name = "B_CellsStickers";
             B_CellsStickers.Size = new System.Drawing.Size(96, 32);
@@ -612,7 +677,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenMiscEditor
             // 
-            B_OpenMiscEditor.Location = new System.Drawing.Point(212, 164);
+            B_OpenMiscEditor.Location = new System.Drawing.Point(316, 164);
             B_OpenMiscEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenMiscEditor.Name = "B_OpenMiscEditor";
             B_OpenMiscEditor.Size = new System.Drawing.Size(96, 32);
@@ -623,7 +688,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenHoneyTreeEditor
             // 
-            B_OpenHoneyTreeEditor.Location = new System.Drawing.Point(316, 164);
+            B_OpenHoneyTreeEditor.Location = new System.Drawing.Point(4, 204);
             B_OpenHoneyTreeEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenHoneyTreeEditor.Name = "B_OpenHoneyTreeEditor";
             B_OpenHoneyTreeEditor.Size = new System.Drawing.Size(96, 32);
@@ -634,7 +699,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenFriendSafari
             // 
-            B_OpenFriendSafari.Location = new System.Drawing.Point(4, 204);
+            B_OpenFriendSafari.Location = new System.Drawing.Point(108, 204);
             B_OpenFriendSafari.Margin = new System.Windows.Forms.Padding(4);
             B_OpenFriendSafari.Name = "B_OpenFriendSafari";
             B_OpenFriendSafari.Size = new System.Drawing.Size(96, 32);
@@ -645,7 +710,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenRTCEditor
             // 
-            B_OpenRTCEditor.Location = new System.Drawing.Point(108, 204);
+            B_OpenRTCEditor.Location = new System.Drawing.Point(212, 204);
             B_OpenRTCEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenRTCEditor.Name = "B_OpenRTCEditor";
             B_OpenRTCEditor.Size = new System.Drawing.Size(96, 32);
@@ -656,7 +721,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenUGSEditor
             // 
-            B_OpenUGSEditor.Location = new System.Drawing.Point(212, 204);
+            B_OpenUGSEditor.Location = new System.Drawing.Point(316, 204);
             B_OpenUGSEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenUGSEditor.Name = "B_OpenUGSEditor";
             B_OpenUGSEditor.Size = new System.Drawing.Size(96, 32);
@@ -667,7 +732,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenGeonetEditor
             // 
-            B_OpenGeonetEditor.Location = new System.Drawing.Point(212, 204);
+            B_OpenGeonetEditor.Location = new System.Drawing.Point(4, 244);
             B_OpenGeonetEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenGeonetEditor.Name = "B_OpenGeonetEditor";
             B_OpenGeonetEditor.Size = new System.Drawing.Size(96, 32);
@@ -678,7 +743,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenUnityTowerEditor
             // 
-            B_OpenUnityTowerEditor.Location = new System.Drawing.Point(212, 204);
+            B_OpenUnityTowerEditor.Location = new System.Drawing.Point(108, 244);
             B_OpenUnityTowerEditor.Margin = new System.Windows.Forms.Padding(4);
             B_OpenUnityTowerEditor.Name = "B_OpenUnityTowerEditor";
             B_OpenUnityTowerEditor.Size = new System.Drawing.Size(96, 32);
@@ -687,9 +752,20 @@ namespace PKHeX.WinForms.Controls
             B_OpenUnityTowerEditor.UseVisualStyleBackColor = true;
             B_OpenUnityTowerEditor.Click += B_OpenUnityTowerEditor_Click;
             // 
+            // B_OpenChatterEditor
+            // 
+            B_OpenChatterEditor.Location = new System.Drawing.Point(212, 244);
+            B_OpenChatterEditor.Margin = new System.Windows.Forms.Padding(4);
+            B_OpenChatterEditor.Name = "B_OpenChatterEditor";
+            B_OpenChatterEditor.Size = new System.Drawing.Size(96, 32);
+            B_OpenChatterEditor.TabIndex = 1;
+            B_OpenChatterEditor.Text = "Chatter";
+            B_OpenChatterEditor.UseVisualStyleBackColor = true;
+            B_OpenChatterEditor.Click += B_OpenChatterEditor_Click;
+            // 
             // B_Roamer
             // 
-            B_Roamer.Location = new System.Drawing.Point(316, 204);
+            B_Roamer.Location = new System.Drawing.Point(316, 244);
             B_Roamer.Margin = new System.Windows.Forms.Padding(4);
             B_Roamer.Name = "B_Roamer";
             B_Roamer.Size = new System.Drawing.Size(96, 32);
@@ -700,7 +776,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_FestivalPlaza
             // 
-            B_FestivalPlaza.Location = new System.Drawing.Point(4, 244);
+            B_FestivalPlaza.Location = new System.Drawing.Point(4, 284);
             B_FestivalPlaza.Margin = new System.Windows.Forms.Padding(4);
             B_FestivalPlaza.Name = "B_FestivalPlaza";
             B_FestivalPlaza.Size = new System.Drawing.Size(96, 32);
@@ -711,7 +787,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_MailBox
             // 
-            B_MailBox.Location = new System.Drawing.Point(108, 244);
+            B_MailBox.Location = new System.Drawing.Point(108, 284);
             B_MailBox.Margin = new System.Windows.Forms.Padding(4);
             B_MailBox.Name = "B_MailBox";
             B_MailBox.Size = new System.Drawing.Size(96, 32);
@@ -722,7 +798,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenApricorn
             // 
-            B_OpenApricorn.Location = new System.Drawing.Point(212, 244);
+            B_OpenApricorn.Location = new System.Drawing.Point(212, 284);
             B_OpenApricorn.Margin = new System.Windows.Forms.Padding(4);
             B_OpenApricorn.Name = "B_OpenApricorn";
             B_OpenApricorn.Size = new System.Drawing.Size(96, 32);
@@ -733,7 +809,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_Raids
             // 
-            B_Raids.Location = new System.Drawing.Point(316, 244);
+            B_Raids.Location = new System.Drawing.Point(316, 284);
             B_Raids.Margin = new System.Windows.Forms.Padding(4);
             B_Raids.Name = "B_Raids";
             B_Raids.Size = new System.Drawing.Size(96, 32);
@@ -742,41 +818,31 @@ namespace PKHeX.WinForms.Controls
             B_Raids.UseVisualStyleBackColor = true;
             B_Raids.Click += B_OpenRaids_Click;
             // 
-            // B_RaidArmor
+            // B_RaidsDLC1
             // 
-            B_RaidArmor.Location = new System.Drawing.Point(4, 284);
-            B_RaidArmor.Margin = new System.Windows.Forms.Padding(4);
-            B_RaidArmor.Name = "B_RaidArmor";
-            B_RaidArmor.Size = new System.Drawing.Size(96, 32);
-            B_RaidArmor.TabIndex = 2;
-            B_RaidArmor.Text = "Raids (DLC 1)";
-            B_RaidArmor.UseVisualStyleBackColor = true;
-            B_RaidArmor.Click += B_OpenRaids_Click;
+            B_RaidsDLC1.Location = new System.Drawing.Point(4, 324);
+            B_RaidsDLC1.Margin = new System.Windows.Forms.Padding(4);
+            B_RaidsDLC1.Name = "B_RaidsDLC1";
+            B_RaidsDLC1.Size = new System.Drawing.Size(96, 32);
+            B_RaidsDLC1.TabIndex = 2;
+            B_RaidsDLC1.Text = "Raids (DLC 1)";
+            B_RaidsDLC1.UseVisualStyleBackColor = true;
+            B_RaidsDLC1.Click += B_OpenRaids_Click;
             // 
-            // B_RaidCrown
+            // B_RaidsDLC2
             // 
-            B_RaidCrown.Location = new System.Drawing.Point(108, 284);
-            B_RaidCrown.Margin = new System.Windows.Forms.Padding(4);
-            B_RaidCrown.Name = "B_RaidCrown";
-            B_RaidCrown.Size = new System.Drawing.Size(96, 32);
-            B_RaidCrown.TabIndex = 4;
-            B_RaidCrown.Text = "Raids (DLC 2)";
-            B_RaidCrown.UseVisualStyleBackColor = true;
-            B_RaidCrown.Click += B_OpenRaids_Click;
-            // 
-            // B_RaidKitakami
-            // 
-            B_RaidKitakami.Margin = new System.Windows.Forms.Padding(4);
-            B_RaidKitakami.Name = "B_RaidKitakami";
-            B_RaidKitakami.Size = new System.Drawing.Size(96, 32);
-            B_RaidKitakami.TabIndex = 4;
-            B_RaidKitakami.Text = "Raids (DLC 1)";
-            B_RaidKitakami.UseVisualStyleBackColor = true;
-            B_RaidKitakami.Click += B_OpenRaids_Click;
+            B_RaidsDLC2.Location = new System.Drawing.Point(108, 324);
+            B_RaidsDLC2.Margin = new System.Windows.Forms.Padding(4);
+            B_RaidsDLC2.Name = "B_RaidsDLC2";
+            B_RaidsDLC2.Size = new System.Drawing.Size(96, 32);
+            B_RaidsDLC2.TabIndex = 4;
+            B_RaidsDLC2.Text = "Raids (DLC 2)";
+            B_RaidsDLC2.UseVisualStyleBackColor = true;
+            B_RaidsDLC2.Click += B_OpenRaids_Click;
             // 
             // B_Blocks
             // 
-            B_Blocks.Location = new System.Drawing.Point(212, 284);
+            B_Blocks.Location = new System.Drawing.Point(212, 324);
             B_Blocks.Margin = new System.Windows.Forms.Padding(4);
             B_Blocks.Name = "B_Blocks";
             B_Blocks.Size = new System.Drawing.Size(96, 32);
@@ -787,7 +853,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OtherSlots
             // 
-            B_OtherSlots.Location = new System.Drawing.Point(316, 284);
+            B_OtherSlots.Location = new System.Drawing.Point(316, 324);
             B_OtherSlots.Margin = new System.Windows.Forms.Padding(4);
             B_OtherSlots.Name = "B_OtherSlots";
             B_OtherSlots.Size = new System.Drawing.Size(96, 32);
@@ -798,7 +864,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_OpenSealStickers
             // 
-            B_OpenSealStickers.Location = new System.Drawing.Point(4, 324);
+            B_OpenSealStickers.Location = new System.Drawing.Point(4, 364);
             B_OpenSealStickers.Margin = new System.Windows.Forms.Padding(4);
             B_OpenSealStickers.Name = "B_OpenSealStickers";
             B_OpenSealStickers.Size = new System.Drawing.Size(96, 32);
@@ -809,7 +875,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_Poffins
             // 
-            B_Poffins.Location = new System.Drawing.Point(108, 324);
+            B_Poffins.Location = new System.Drawing.Point(108, 364);
             B_Poffins.Margin = new System.Windows.Forms.Padding(4);
             B_Poffins.Name = "B_Poffins";
             B_Poffins.Size = new System.Drawing.Size(96, 32);
@@ -820,7 +886,7 @@ namespace PKHeX.WinForms.Controls
             // 
             // B_RaidsSevenStar
             // 
-            B_RaidsSevenStar.Location = new System.Drawing.Point(212, 324);
+            B_RaidsSevenStar.Location = new System.Drawing.Point(212, 364);
             B_RaidsSevenStar.Margin = new System.Windows.Forms.Padding(4);
             B_RaidsSevenStar.Name = "B_RaidsSevenStar";
             B_RaidsSevenStar.Size = new System.Drawing.Size(96, 32);
@@ -828,6 +894,39 @@ namespace PKHeX.WinForms.Controls
             B_RaidsSevenStar.Text = "Raids (7 Star)";
             B_RaidsSevenStar.UseVisualStyleBackColor = true;
             B_RaidsSevenStar.Click += B_OpenRaids_Click;
+            // 
+            // B_OpenBattlePass
+            // 
+            B_OpenBattlePass.Location = new System.Drawing.Point(316, 364);
+            B_OpenBattlePass.Margin = new System.Windows.Forms.Padding(4);
+            B_OpenBattlePass.Name = "B_OpenBattlePass";
+            B_OpenBattlePass.Size = new System.Drawing.Size(96, 32);
+            B_OpenBattlePass.TabIndex = 8;
+            B_OpenBattlePass.Text = "Battle Passes";
+            B_OpenBattlePass.UseVisualStyleBackColor = true;
+            B_OpenBattlePass.Click += B_OpenBattlePass_Click;
+            // 
+            // B_OpenGear
+            // 
+            B_OpenGear.Location = new System.Drawing.Point(4, 404);
+            B_OpenGear.Margin = new System.Windows.Forms.Padding(4);
+            B_OpenGear.Name = "B_OpenGear";
+            B_OpenGear.Size = new System.Drawing.Size(96, 32);
+            B_OpenGear.TabIndex = 9;
+            B_OpenGear.Text = "Gear";
+            B_OpenGear.UseVisualStyleBackColor = true;
+            B_OpenGear.Click += B_OpenGear_Click;
+            // 
+            // B_OpenFashion
+            // 
+            B_OpenFashion.Location = new System.Drawing.Point(108, 404);
+            B_OpenFashion.Margin = new System.Windows.Forms.Padding(4);
+            B_OpenFashion.Name = "B_OpenFashion";
+            B_OpenFashion.Size = new System.Drawing.Size(96, 32);
+            B_OpenFashion.TabIndex = 10;
+            B_OpenFashion.Text = "Fashion";
+            B_OpenFashion.UseVisualStyleBackColor = true;
+            B_OpenFashion.Click += B_OpenFashion_Click;
             // 
             // FLP_SAVToolsMisc
             // 
@@ -899,13 +998,24 @@ namespace PKHeX.WinForms.Controls
             B_JPEG.UseVisualStyleBackColor = true;
             B_JPEG.Click += B_JPEG_Click;
             // 
+            // B_ConvertKorean
+            // 
+            B_ConvertKorean.Location = new System.Drawing.Point(0, 48);
+            B_ConvertKorean.Margin = new System.Windows.Forms.Padding(0);
+            B_ConvertKorean.Name = "B_ConvertKorean";
+            B_ConvertKorean.Size = new System.Drawing.Size(88, 48);
+            B_ConvertKorean.TabIndex = 6;
+            B_ConvertKorean.Text = "Korean Save Conversion";
+            B_ConvertKorean.UseVisualStyleBackColor = true;
+            B_ConvertKorean.Click += B_ConvertKorean_Click;
+            // 
             // CB_SaveSlot
             // 
             CB_SaveSlot.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             CB_SaveSlot.FormattingEnabled = true;
             CB_SaveSlot.Location = new System.Drawing.Point(152, 144);
             CB_SaveSlot.Name = "CB_SaveSlot";
-            CB_SaveSlot.Size = new System.Drawing.Size(121, 23);
+            CB_SaveSlot.Size = new System.Drawing.Size(121, 25);
             CB_SaveSlot.TabIndex = 20;
             CB_SaveSlot.SelectedIndexChanged += UpdateSaveSlot;
             // 
@@ -918,83 +1028,6 @@ namespace PKHeX.WinForms.Controls
             L_SaveSlot.Text = "Save Slot:";
             L_SaveSlot.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // L_Secure2
-            // 
-            L_Secure2.Location = new System.Drawing.Point(32, 112);
-            L_Secure2.Name = "L_Secure2";
-            L_Secure2.Size = new System.Drawing.Size(120, 24);
-            L_Secure2.TabIndex = 18;
-            L_Secure2.Text = "Secure Value 2:";
-            L_Secure2.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // TB_Secure2
-            // 
-            TB_Secure2.Enabled = false;
-            TB_Secure2.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            TB_Secure2.Location = new System.Drawing.Point(152, 112);
-            TB_Secure2.MaxLength = 16;
-            TB_Secure2.MinimumSize = new System.Drawing.Size(120, 24);
-            TB_Secure2.Name = "TB_Secure2";
-            TB_Secure2.PlaceholderText = "0000000000000000";
-            TB_Secure2.Size = new System.Drawing.Size(120, 24);
-            TB_Secure2.TabIndex = 17;
-            TB_Secure2.Validated += UpdateStringSeed;
-            // 
-            // L_Secure1
-            // 
-            L_Secure1.Location = new System.Drawing.Point(32, 88);
-            L_Secure1.Name = "L_Secure1";
-            L_Secure1.Size = new System.Drawing.Size(120, 24);
-            L_Secure1.TabIndex = 16;
-            L_Secure1.Text = "Secure Value 1:";
-            L_Secure1.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // TB_Secure1
-            // 
-            TB_Secure1.Enabled = false;
-            TB_Secure1.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            TB_Secure1.Location = new System.Drawing.Point(152, 88);
-            TB_Secure1.MaxLength = 16;
-            TB_Secure1.MinimumSize = new System.Drawing.Size(120, 24);
-            TB_Secure1.Name = "TB_Secure1";
-            TB_Secure1.PlaceholderText = "0000000000000000";
-            TB_Secure1.Size = new System.Drawing.Size(120, 24);
-            TB_Secure1.TabIndex = 15;
-            TB_Secure1.Validated += UpdateStringSeed;
-            // 
-            // L_GameSync
-            // 
-            L_GameSync.Location = new System.Drawing.Point(32, 64);
-            L_GameSync.Name = "L_GameSync";
-            L_GameSync.Size = new System.Drawing.Size(120, 24);
-            L_GameSync.TabIndex = 11;
-            L_GameSync.Text = "Game Sync ID:";
-            L_GameSync.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // TB_GameSync
-            // 
-            TB_GameSync.Enabled = false;
-            TB_GameSync.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
-            TB_GameSync.Location = new System.Drawing.Point(152, 64);
-            TB_GameSync.MaxLength = 16;
-            TB_GameSync.MinimumSize = new System.Drawing.Size(120, 24);
-            TB_GameSync.Name = "TB_GameSync";
-            TB_GameSync.PlaceholderText = "0000000000000000";
-            TB_GameSync.Size = new System.Drawing.Size(120, 24);
-            TB_GameSync.TabIndex = 10;
-            TB_GameSync.Validated += UpdateStringSeed;
-            // 
-            // B_ConvertKorean
-            // 
-            B_ConvertKorean.Location = new System.Drawing.Point(0, 48);
-            B_ConvertKorean.Margin = new System.Windows.Forms.Padding(0);
-            B_ConvertKorean.Name = "B_ConvertKorean";
-            B_ConvertKorean.Size = new System.Drawing.Size(88, 48);
-            B_ConvertKorean.TabIndex = 6;
-            B_ConvertKorean.Text = "Korean Save Conversion";
-            B_ConvertKorean.UseVisualStyleBackColor = true;
-            B_ConvertKorean.Click += B_ConvertKorean_Click;
-            // 
             // SAVEditor
             // 
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Inherit;
@@ -1004,6 +1037,7 @@ namespace PKHeX.WinForms.Controls
             tabBoxMulti.ResumeLayout(false);
             Tab_Box.ResumeLayout(false);
             Tab_Box.PerformLayout();
+            PopoutMenu.ResumeLayout(false);
             Tab_PartyBattle.ResumeLayout(false);
             Tab_PartyBattle.PerformLayout();
             Tab_Other.ResumeLayout(false);
@@ -1040,13 +1074,7 @@ namespace PKHeX.WinForms.Controls
         private System.Windows.Forms.TabPage Tab_SAV;
         private System.Windows.Forms.ComboBox CB_SaveSlot;
         private System.Windows.Forms.Label L_SaveSlot;
-        private System.Windows.Forms.Label L_Secure2;
-        private System.Windows.Forms.TextBox TB_Secure2;
-        private System.Windows.Forms.Label L_Secure1;
-        private System.Windows.Forms.TextBox TB_Secure1;
         private System.Windows.Forms.Button B_JPEG;
-        private System.Windows.Forms.Label L_GameSync;
-        private System.Windows.Forms.TextBox TB_GameSync;
         private System.Windows.Forms.Button B_SaveBoxBin;
         private System.Windows.Forms.Button B_VerifyCHK;
         private System.Windows.Forms.FlowLayoutPanel FLP_SAVtools;
@@ -1065,7 +1093,7 @@ namespace PKHeX.WinForms.Controls
         private System.Windows.Forms.Button B_OpenSuperTraining;
         private System.Windows.Forms.Button B_OpenHallofFame;
         private System.Windows.Forms.Button B_OUTPasserby;
-        private System.Windows.Forms.Button B_CGearSkin;
+        private System.Windows.Forms.Button B_DLC;
         private System.Windows.Forms.Button B_OpenPokeBeans;
         private System.Windows.Forms.Button B_CellsStickers;
         private System.Windows.Forms.Button B_OpenMiscEditor;
@@ -1076,18 +1104,18 @@ namespace PKHeX.WinForms.Controls
         private System.Windows.Forms.Button B_OpenUGSEditor;
         private System.Windows.Forms.Button B_OpenGeonetEditor;
         private System.Windows.Forms.Button B_OpenUnityTowerEditor;
+        private System.Windows.Forms.Button B_OpenChatterEditor;
         private System.Windows.Forms.Button B_Roamer;
         private System.Windows.Forms.Button B_FestivalPlaza;
         private System.Windows.Forms.Button B_MailBox;
         private System.Windows.Forms.Button B_OpenApricorn;
-        private SlotList SL_Extra;
+        internal SlotList SL_Extra;
         private PartyEditor SL_Party;
         private System.Windows.Forms.Button B_Raids;
         private System.Windows.Forms.Button B_Blocks;
-        private System.Windows.Forms.Button B_RaidArmor;
+        private System.Windows.Forms.Button B_RaidsDLC1;
+        private System.Windows.Forms.Button B_RaidsDLC2;
         private System.Windows.Forms.Button B_OtherSlots;
-        private System.Windows.Forms.Button B_RaidCrown;
-        private System.Windows.Forms.Button B_RaidKitakami;
         private System.Windows.Forms.Button Menu_ExportBAK;
         private System.Windows.Forms.FlowLayoutPanel FLP_SAVToolsMisc;
         private System.Windows.Forms.Button B_OpenSealStickers;
@@ -1095,5 +1123,14 @@ namespace PKHeX.WinForms.Controls
         private System.Windows.Forms.Button B_VerifySaveEntities;
         private System.Windows.Forms.Button B_RaidsSevenStar;
         private System.Windows.Forms.Button B_ConvertKorean;
+        private System.Windows.Forms.Button B_OpenBattlePass;
+        private System.Windows.Forms.Button B_OpenGear;
+        private System.Windows.Forms.Button B_OpenFashion;
+        private System.Windows.Forms.Button B_Donuts;
+        private System.Windows.Forms.Button B_SearchBox;
+        private System.Windows.Forms.Button B_PopoutBox;
+        private System.Windows.Forms.ContextMenuStrip PopoutMenu;
+        private System.Windows.Forms.ToolStripMenuItem Menu_PopoutBoxSingle;
+        private System.Windows.Forms.ToolStripMenuItem Menu_PopoutBoxAll;
     }
 }

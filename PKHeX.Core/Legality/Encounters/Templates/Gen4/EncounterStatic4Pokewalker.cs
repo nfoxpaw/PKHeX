@@ -1,5 +1,6 @@
 using System;
 using static System.Buffers.Binary.BinaryPrimitives;
+using static PKHeX.Core.RandomCorrelationRating;
 
 namespace PKHeX.Core;
 
@@ -9,18 +10,18 @@ namespace PKHeX.Core;
 public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<PK4>, IMoveset, IRandomCorrelation, IFixedGender
 {
-    public int Generation => 4;
+    public byte Generation => 4;
     public EntityContext Context => EntityContext.Gen4;
     public GameVersion Version => GameVersion.HGSS;
 
-    public int Location => Locations.PokeWalker4;
+    public ushort Location => Locations.PokeWalker4;
     public bool IsShiny => false;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.Poke;
     public AbilityPermission Ability => AbilityPermission.Any12;
     public Shiny Shiny => Shiny.Never;
     public byte Form => 0;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
 
     public ushort Species { get; }
     public byte Level { get; }
@@ -68,49 +69,62 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
 
     public PK4 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
+        int language = (int)Language.GetSafeLanguage456((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.HGSS[Species];
         var pk = new PK4
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Met_Location = Location,
-            Met_Level = LevelMin,
-            Version = (byte)version,
+            MetLocation = Location,
+            MetLevel = LevelMin,
+            Version = version,
             MetDate = EncounterDate.GetDateNDS(),
             Ball = (byte)FixedBall,
 
-            Language = lang,
-            OT_Name = tr.OT,
-            OT_Gender = tr.Gender,
+            Language = language,
+            OriginalTrainerName = tr.OT,
+            OriginalTrainerGender = tr.Gender,
             ID32 = tr.ID32,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
 
         SetPINGA(pk, criteria, pi);
         if (Moves.HasMoves)
             pk.SetMoves(Moves);
         else
-            EncounterUtil1.SetEncounterMoves(pk, version, LevelMin);
+            EncounterUtil.SetEncounterMoves(pk, version, LevelMin);
 
         pk.ResetPartyStats();
         return pk;
     }
 
-    private void SetPINGA(PK4 pk, EncounterCriteria criteria, PersonalInfo4 pi)
+    private void SetPINGA(PK4 pk, in EncounterCriteria criteria, PersonalInfo4 pi)
     {
-        int gender = criteria.GetGender(Gender, pi);
+        var gender = criteria.GetGender(Gender, pi);
         var nature = (uint)criteria.GetNature();
 
         var pid = pk.PID = PokewalkerRNG.GetPID(pk.TID16, pk.SID16, nature, pk.Gender = gender, pi.Gender);
         // Cannot force an ability; nature-gender-trainerID only yield fixed PIDs.
         pk.RefreshAbility((int)(pid & 1));
-        Span<int> ivs = stackalloc int[6];
-        PokewalkerRNG.SetRandomIVs(ivs, criteria);
-        pk.SetIVs(ivs);
+        pk.IV32 = GetIV32(criteria);
+    }
+
+    private static uint GetIV32(in EncounterCriteria criteria)
+    {
+        if (criteria.IsSpecifiedIVsAll()) // Don't trust that the requirements are valid
+        {
+            criteria.GetCombinedIVs(out var iv1, out var iv2);
+
+            // With Mic Test, any seed can be the seed that immediately generates the IVs.
+            var ctr = LCRNGReversal.GetSeedsIVs(stackalloc uint[LCRNG.MaxCountSeedsIV], iv1, iv2);
+            if (ctr != 0)
+                return criteria.GetCombinedIVs();
+        }
+        PokewalkerRNG.GetRandomIVs(criteria, out var iv32);
+        return iv32;
     }
 
     #endregion
@@ -131,11 +145,11 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
         return true;
     }
 
-    private bool IsMatchSeed(PKM pk)
+    private static bool IsMatchSeed(PKM pk)
     {
         Span<int> ivs = stackalloc int[6];
         pk.GetIVs(ivs);
-        var seed = PokewalkerRNG.GetFirstSeed(Species, Course, ivs);
+        var seed = PokewalkerRNG.GetLeastEffortSeed(ivs);
         return seed.Type != PokewalkerSeedType.None;
     }
 
@@ -146,7 +160,7 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
 
         // Azurill-F can change to M when evolving in Gen4 (but not in Gen5+) due to Gender Ratio differences.
         if (pk.Species != Species && Species == (ushort)Core.Species.Azurill && Gender == 1)
-            return EntityGender.GetFromPIDAndRatio(pk.PID, 0xBF) == Gender;
+            return EntityGender.GetFromPID(pk.PID, EntityGender.MF) == Gender;
 
         return true;
     }
@@ -154,13 +168,13 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
     private static bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : 0;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private bool IsMatchLocation(PKM pk)
     {
         if (pk.Format == 4)
-            return pk.Met_Location == Location;
+            return pk.MetLocation == Location;
         return true; // transfer location verified later
     }
 
@@ -168,7 +182,7 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
     {
         if (pk.Format != 4) // Met Level lost on PK4=>PK5
             return evo.LevelMax >= Level;
-        return pk.Met_Level == Level;
+        return pk.MetLevel == Level;
     }
 
     public EncounterMatchRating GetMatchRating(PKM pk)
@@ -180,18 +194,18 @@ public sealed record EncounterStatic4Pokewalker(PokewalkerCourse4 Course)
         return EncounterMatchRating.Match;
     }
 
-    private bool IsMatchPartial(PKM pk) => pk.Ball != (byte)Ball.Poke || !IsMatchSeed(pk);
+    private static bool IsMatchPartial(PKM pk) => pk.Ball != (byte)Ball.Poke || !IsMatchSeed(pk);
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk)
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk)
     {
-        if (val is PIDType.Pokewalker)
-            return true;
+        if (type is PIDType.Pokewalker)
+            return Match;
 
         // Pokewalker can sometimes be confused with CuteCharm due to the PID creation routine. Double check if it is okay.
-        if (val is PIDType.CuteCharm)
-            return MethodFinder.GetCuteCharmMatch(pk, pk.EncryptionConstant, out _) && MethodFinder.IsCuteCharm4Valid(this, pk);
-        return false;
+        if (type is PIDType.CuteCharm)
+            return CuteCharm4.IsCuteCharm(pk, pk.EncryptionConstant) && CuteCharm4.IsValid(this, pk) ? Match : Mismatch;
+        return Mismatch;
     }
 
     public PIDType GetSuggestedCorrelation() => PIDType.Pokewalker;

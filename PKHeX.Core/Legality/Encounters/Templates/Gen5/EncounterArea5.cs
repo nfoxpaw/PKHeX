@@ -1,10 +1,11 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using static System.Buffers.Binary.BinaryPrimitives;
 
 namespace PKHeX.Core;
 
 /// <summary>
-/// <see cref="GameVersion.Gen5"/> encounter area
+/// <see cref="EntityContext.Gen5"/> encounter area
 /// </summary>
 public sealed record EncounterArea5 : IEncounterArea<EncounterSlot5>, IAreaLocation
 {
@@ -12,35 +13,35 @@ public sealed record EncounterArea5 : IEncounterArea<EncounterSlot5>, IAreaLocat
     public GameVersion Version { get; }
 
     public readonly ushort Location;
-    public readonly SlotType Type;
+    public readonly SlotType5 Type;
 
-    public bool IsMatchLocation(int location) => Location == location;
+    public bool IsMatchLocation(ushort location) => Location == location;
 
-    public static EncounterArea5[] GetAreas(BinLinkerAccessor input, GameVersion game)
+    public static EncounterArea5[] GetAreas(BinLinkerAccessor input, [ConstantExpected] GameVersion version)
     {
         var result = new EncounterArea5[input.Length];
         for (int i = 0; i < result.Length; i++)
-            result[i] = new EncounterArea5(input[i], game);
+            result[i] = new EncounterArea5(input[i], version);
         return result;
     }
 
-    private EncounterArea5(ReadOnlySpan<byte> data, GameVersion game)
+    private EncounterArea5(ReadOnlySpan<byte> data, [ConstantExpected] GameVersion version)
     {
         Location = ReadUInt16LittleEndian(data);
-        Type = (SlotType)data[2];
-        Version = game;
+        Type = (SlotType5)data[2];
+        Version = version;
 
-        Slots = ReadSlots(data);
+        Slots = ReadSlots(data[4..]);
     }
 
     private EncounterSlot5[] ReadSlots(ReadOnlySpan<byte> data)
     {
         const int size = 4;
-        int count = (data.Length - 4) / size;
+        int count = data.Length / size;
         var slots = new EncounterSlot5[count];
         for (int i = 0; i < slots.Length; i++)
         {
-            int offset = 4 + (size * i);
+            int offset = size * i;
             var entry = data.Slice(offset, size);
             slots[i] = ReadSlot(entry);
         }
@@ -57,4 +58,15 @@ public sealed record EncounterArea5 : IEncounterArea<EncounterSlot5>, IAreaLocat
         byte max = entry[3];
         return new EncounterSlot5(this, species, form, min, max);
     }
+}
+
+public enum SlotType5 : byte
+{
+    Standard = 0,
+    Grass = 1,
+    Surf = 2,
+    Super_Rod = 3,
+
+    Swarm = 4,
+    HiddenGrotto = 5,
 }

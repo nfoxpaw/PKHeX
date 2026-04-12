@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.Gen1"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen1"/> encounters.
 /// </summary>
 public record struct EncounterPossible1(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -157,7 +157,7 @@ public record struct EncounterPossible1(EvoCriteria[] Chain, EncounterTypeGroup 
                 { State = YieldState.EventVC; goto case YieldState.EventVC; }
                 State = YieldState.EventGB; goto case YieldState.EventGB;
             case YieldState.EventVC:
-                if (TryGetNext(Encounters1VC.Gifts))
+                if (TryGetNext(Encounters1VC.Gift))
                     return true;
                 break;
             case YieldState.EventGB:
@@ -192,6 +192,19 @@ public record struct EncounterPossible1(EvoCriteria[] Chain, EncounterTypeGroup 
                     continue;
                 return SetCurrent(enc);
             }
+        }
+        return false;
+    }
+
+    private bool TryGetNext<T>(T enc) where T : class, IEncounterable, IEncounterMatch
+    {
+        if (Index++ != 0)
+            return false;
+        foreach (var evo in Chain)
+        {
+            if (evo.Species != enc.Species)
+                continue;
+            return SetCurrent(enc);
         }
         return false;
     }

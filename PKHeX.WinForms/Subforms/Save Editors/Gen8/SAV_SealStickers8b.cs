@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Linq;
@@ -109,9 +109,9 @@ public partial class SAV_SealStickers8b : Form
             var index = int.Parse(cells[0].Value?.ToString() ?? "0");
             var item = items[index];
 
-            item.Count = int.TryParse(cells[2].Value.ToString(), out var count) ? count : 0;
-            item.TotalCount = int.TryParse(cells[3].Value.ToString(), out var total) ? total : 0;
-            item.IsGet = (bool)cells[4].Value;
+            item.Count = int.TryParse(cells[2].Value!.ToString(), out var count) ? count : 0;
+            item.TotalCount = int.TryParse(cells[3].Value!.ToString(), out var total) ? total : 0;
+            item.IsGet = (bool)cells[4].Value!;
         }
     }
 
@@ -137,7 +137,7 @@ public partial class SAV_SealStickers8b : Form
             cells[3].Value = total.ToString();
             cells[4].Value = true;
         }
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_None_Click(object sender, EventArgs e)
@@ -148,7 +148,7 @@ public partial class SAV_SealStickers8b : Form
             cells[2].Value = cells[3].Value = 0.ToString();
             cells[4].Value = false;
         }
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_Save_Click(object sender, EventArgs e)

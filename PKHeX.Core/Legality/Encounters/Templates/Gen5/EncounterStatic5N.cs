@@ -6,23 +6,27 @@ namespace PKHeX.Core;
 /// Generation 5 Static Encounter from N
 /// </summary>
 public sealed record EncounterStatic5N(uint PID)
-    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK5>, IFixedTrainer, IFixedNature
+    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK5>, IFixedTrainer, IFixedNature, ITrainerID32ReadOnly
 {
-    public int Generation => 5;
+    public byte Generation => 5;
     public EntityContext Context => EntityContext.Gen5;
     public GameVersion Version => GameVersion.B2W2;
     public const bool NSparkle = true;
     public bool IsFixedTrainer => true;
-    private const uint ID32 = 2;
+    private const ushort ID32 = 2;
     private const byte IV = 30;
 
     public byte Form => 0;
-    int ILocation.Location => Location;
+    ushort ILocation.Location => Location;
     public bool IsShiny => false;
     public Shiny Shiny => Shiny.FixedValue;
-    public bool EggEncounter => false;
-    public int EggLocation => 0;
+    public bool IsEgg => false;
+    public ushort EggLocation => 0;
     public Ball FixedBall => Species == (int)Core.Species.Zorua ? Ball.Poke : Ball.None; // Zorua can't be captured; others can.
+
+    public ushort TID16 => ID32;
+    uint ITrainerID32ReadOnly.ID32 => ID32;
+    public ushort SID16 => 0;
 
     public required ushort Species { get; init; }
     public required byte Level { get; init; }
@@ -30,7 +34,7 @@ public sealed record EncounterStatic5N(uint PID)
     public required Nature Nature { get; init; }
     public required AbilityPermission Ability { get; init; }
 
-    public string Name => "Dream Radar Encounter";
+    public string Name => "N's Pokémon";
     public string LongName => Name;
     public byte LevelMin => Level;
     public byte LevelMax => Level;
@@ -43,38 +47,33 @@ public sealed record EncounterStatic5N(uint PID)
 
     public PK5 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage456((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.B2W2[Species];
         var pk = new PK5
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            Met_Location = Location,
-            Met_Level = LevelMin,
+            MetLocation = Location,
+            MetLevel = LevelMin,
             MetDate = EncounterDate.GetDateNDS(),
             Ball = (byte)(FixedBall != Ball.None ? FixedBall : Ball.Poke),
 
-            Version = (byte)version,
-            Language = lang,
+            Version = version,
+            Language = language,
 
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
-            IV_HP = IV,
-            IV_ATK = IV,
-            IV_DEF = IV,
-            IV_SPA = IV,
-            IV_SPD = IV,
-            IV_SPE = IV,
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
+            IV32 = 0b11110_11110_11110_11110_11110_11110, // all 30
 
             NSparkle = NSparkle,
-            OT_Name = GetOT(lang),
-            OT_Gender = 0,
+            OriginalTrainerName = GetOT(language),
+            OriginalTrainerGender = 0,
             ID32 = ID32,
             PID = PID,
-            Nature = (byte)Nature,
-            Gender = pi.Genderless ? 2 : 0,
+            Nature = Nature,
+            Gender = pi.Genderless ? (byte)2 : default,
             Ability = Ability switch
             {
                 AbilityPermission.OnlyFirst => pi.Ability1,
@@ -84,7 +83,7 @@ public sealed record EncounterStatic5N(uint PID)
             HiddenAbility = Ability == AbilityPermission.OnlyHidden,
         };
 
-        EncounterUtil1.SetEncounterMoves(pk, version, LevelMin);
+        EncounterUtil.SetEncounterMoves(pk, version, LevelMin);
 
         pk.ResetPartyStats();
 
@@ -101,16 +100,16 @@ public sealed record EncounterStatic5N(uint PID)
             return false;
         if (!IsMatchEggLocation(pk))
             return false;
-        if (pk.Met_Location != Location)
+        if (pk.MetLocation != Location)
             return false;
-        if (pk.Met_Level != Level)
+        if (pk.MetLevel != Level)
             return false;
         if (Form != evo.Form && !FormInfo.IsFormChangeable(Species, Form, pk.Form, Context, pk.Context))
             return false;
         var pi = PersonalTable.B2W2.GetFormEntry(Species, Form);
         if (pk.Gender != (pi.Genderless ? 2 : 0))
             return false;
-        if (pk.OT_Gender != 0)
+        if (pk.OriginalTrainerGender != 0)
             return false;
         if (pk is not { IV_HP: IV, IV_ATK: IV, IV_DEF: IV, IV_SPA: IV, IV_SPD: IV, IV_SPE: IV })
             return false;
@@ -122,7 +121,7 @@ public sealed record EncounterStatic5N(uint PID)
     private bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : EggLocation;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private static string GetOT(int lang) => lang == (int)LanguageID.Japanese ? "Ｎ" : "N";

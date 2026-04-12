@@ -1,27 +1,27 @@
 namespace PKHeX.Core;
 
 /// <summary>
-/// Encounter Slot found in <see cref="GameVersion.Gen1"/>.
+/// Encounter Slot found in <see cref="EntityContext.Gen1"/>.
 /// </summary>
 public sealed record EncounterSlot1(EncounterArea1 Parent, ushort Species, byte LevelMin, byte LevelMax, byte SlotNumber)
-    : IEncounterConvertible<PK1>, IEncounterable, IEncounterMatch, INumberedSlot
+    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK1>, INumberedSlot
 {
-    public int Generation => 1;
+    public byte Generation => 1;
     public EntityContext Context => EntityContext.Gen1;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.Poke;
     public AbilityPermission Ability => TransporterLogic.IsHiddenDisallowedVC1(Species) ? AbilityPermission.OnlyFirst : AbilityPermission.OnlyHidden;
     public Shiny Shiny => Shiny.Random;
     public bool IsShiny => false;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
 
     public byte Form => 0;
 
     public string Name => $"Wild Encounter ({Version})";
     public string LongName => $"{Name} {Type.ToString().Replace('_', ' ')}";
     public GameVersion Version => Parent.Version;
-    public int Location => Parent.Location;
-    public SlotType Type => Parent.Type;
+    public ushort Location => Parent.Location;
+    public SlotType1 Type => Parent.Type;
 
     #region Generating
     PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria) => ConvertToPKM(tr, criteria);
@@ -31,24 +31,27 @@ public sealed record EncounterSlot1(EncounterArea1 Parent, ushort Species, byte 
 
     public PK1 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, Version);
-        var isJapanese = lang == (int)LanguageID.Japanese;
-        var pi = EncounterUtil1.GetPersonal1(Version, Species);
+        var version = this.GetCompatibleVersion(tr.Version);
+        int language = (int)Language.GetSafeLanguage1((LanguageID)tr.Language, version);
+        var isJapanese = language == (int)LanguageID.Japanese;
+        var pi = EncounterUtil.GetPersonal1(version, Species);
         var pk = new PK1(isJapanese)
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            Catch_Rate = EncounterUtil1.GetWildCatchRate(Version, Species),
-            DV16 = EncounterUtil1.GetRandomDVs(Util.Rand),
+            CatchRate = pi.CatchRate,
+            DV16 = EncounterUtil.GetRandomDVs(Util.Rand, criteria.Shiny.IsShiny(), criteria.HiddenPowerType),
 
-            OT_Name = EncounterUtil1.GetTrainerName(tr, lang),
+            OriginalTrainerName = EncounterUtil.GetTrainerName(tr, language),
             TID16 = tr.TID16,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
             Type1 = pi.Type1,
             Type2 = pi.Type2,
         };
+        pk.SetNotNicknamed(language);
+        if (criteria.Shiny.IsShiny())
+            pk.SetShiny();
 
-        EncounterUtil1.SetEncounterMoves(pk, Version, LevelMin);
+        EncounterUtil.SetEncounterMoves(pk, version, LevelMin);
 
         pk.ResetPartyStats();
         return pk;
@@ -65,9 +68,9 @@ public sealed record EncounterSlot1(EncounterArea1 Parent, ushort Species, byte 
         if (pk is not PK1 pk1)
             return true;
 
-        var rate = pk1.Catch_Rate;
-        var expect = EncounterUtil1.GetWildCatchRate(Version, Species);
-        if (expect != rate && !(ParseSettings.AllowGen1Tradeback && GBRestrictions.IsTradebackCatchRate(rate)))
+        var rate = pk1.CatchRate;
+        var expect = EncounterUtil.GetPersonal1(Version, Species).CatchRate;
+        if (expect != rate && !(ParseSettings.AllowGen1Tradeback && ItemConverter.IsCatchRateHeldItem(rate)))
             return false;
         return true;
     }

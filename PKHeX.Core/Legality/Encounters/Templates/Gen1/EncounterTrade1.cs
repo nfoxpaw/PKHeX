@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace PKHeX.Core;
 
@@ -12,19 +11,19 @@ namespace PKHeX.Core;
 /// </remarks>
 public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTrainer, IFixedNickname, IEncounterConvertible<PK1>
 {
-    public int Generation => 1;
+    public byte Generation => 1;
     public EntityContext Context => EntityContext.Gen1;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.Poke;
     public AbilityPermission Ability => Species == (ushort)Core.Species.Haunter ? AbilityPermission.OnlyFirst : AbilityPermission.OnlyHidden;
     public Shiny Shiny => Shiny.Random;
     public bool IsShiny => false;
-    public int Location => 0;
-    public int EggLocation => 0;
+    public ushort Location => 0;
+    public ushort EggLocation => 0;
     public bool IsFixedTrainer => true;
     public bool IsFixedNickname => true;
 
-    private string[] Nicknames { get; }
+    private readonly ReadOnlyMemory<string> Nicknames;
     public ushort Species { get; }
     public byte Form => 0;
     public bool EvolveOnTrade { get; init; }
@@ -62,7 +61,7 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
             // Special consideration for Hiragana strings that are transferred
             if (Version == GameVersion.YW && Species == (int)Core.Species.Dugtrio)
                 return nick is "ぐりお";
-            return nick.SequenceEqual(Nicknames[1]);
+            return nick.SequenceEqual(Nicknames.Span[(int)LanguageID.Japanese]);
         }
 
         return GetNicknameIndex(nick) >= 2;
@@ -73,17 +72,22 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
     private static bool IsTrainerNameValid(PKM pk)
     {
         if (pk.Format <= 2)
-            return pk.OT_Trash is [StringConverter12.G1TradeOTCode, StringConverter12.G1TerminatorCode, ..];
+            return pk.OriginalTrainerTrash is [StringConverter1.TradeOTCode, StringConverter1.TerminatorCode, ..];
         var lang = pk.Language;
         var expect = StringConverter12Transporter.GetTradeNameGen1(lang);
-        return pk.OT_Name == expect;
+
+        Span<char> trainer = stackalloc char[pk.TrashCharCountTrainer];
+        int len = pk.LoadString(pk.OriginalTrainerTrash, trainer);
+        trainer = trainer[..len];
+
+        return trainer.SequenceEqual(expect);
     }
 
-    private int GetNicknameIndex(ReadOnlySpan<char> nickname) => GetIndex(nickname, Nicknames);
+    private int GetNicknameIndex(ReadOnlySpan<char> nickname) => GetIndex(nickname, Nicknames.Span);
 
-    private static int GetIndex(ReadOnlySpan<char> name, IReadOnlyList<string> arr)
+    private static int GetIndex(ReadOnlySpan<char> name, ReadOnlySpan<string> arr)
     {
-        for (int i = 0; i < arr.Count; i++)
+        for (int i = 0; i < arr.Length; i++)
         {
             if (name.SequenceEqual(arr[i]))
                 return i;
@@ -111,24 +115,26 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
     {
         bool gsc = CanObtainMinGSC();
         var level = gsc ? LevelMinGSC : LevelMinRBY;
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, Version);
-        var isJapanese = lang == (int)LanguageID.Japanese;
-        var pi = EncounterUtil1.GetPersonal1(Version, Species);
+        var version = this.GetCompatibleVersion(tr.Version);
+        int language = (int)Language.GetSafeLanguage1((LanguageID)tr.Language, version);
+        var isJapanese = language == (int)LanguageID.Japanese;
+        var pi = EncounterUtil.GetPersonal1(version, Species);
         var pk = new PK1(isJapanese)
         {
             Species = Species,
             CurrentLevel = level,
-            Catch_Rate = EncounterUtil1.GetWildCatchRate(Version, Species),
-            DV16 = EncounterUtil1.GetRandomDVs(Util.Rand),
+            CatchRate = pi.CatchRate,
+            DV16 = criteria.IsSpecifiedIVsAll() ? criteria.GetCombinedDVs()
+                : EncounterUtil.GetRandomDVs(Util.Rand, criteria.Shiny.IsShiny(), criteria.HiddenPowerType),
 
-            Nickname = Nicknames[lang],
+            Nickname = Nicknames.Span[language],
             TID16 = tr.TID16,
             Type1 = pi.Type1,
             Type2 = pi.Type2,
         };
-        pk.OT_Trash[0] = StringConverter12.G1TradeOTCode;
+        pk.OriginalTrainerTrash[0] = StringConverter1.TradeOTCode;
 
-        EncounterUtil1.SetEncounterMoves(pk, Version, level);
+        EncounterUtil.SetEncounterMoves(pk, version, level);
         if (EvolveOnTrade)
             pk.Species++;
 
@@ -141,7 +147,7 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
     #region Matching
     public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language) => IsTrainerNameValid(pk);
     public bool IsNicknameMatch(PKM pk, ReadOnlySpan<char> nickname, int language) => IsNicknameValid(pk, nickname);
-    public string GetNickname(int language) => (uint)language < Nicknames.Length ? Nicknames[language] : Nicknames[0];
+    public string GetNickname(int language) => Nicknames.Span[(uint)language < Nicknames.Length ? language : 0];
 
     public EncounterMatchRating GetMatchRating(PKM pk)
     {
@@ -168,7 +174,7 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
         return true;
     }
 
-    private bool IsMatchLevel(PKM pk, int lvl)
+    private bool IsMatchLevel(PKM pk, byte lvl)
     {
         if (pk is not PK1 || CanObtainMinGSC())
             return lvl >= LevelMinGSC;
@@ -188,8 +194,8 @@ public sealed record EncounterTrade1 : IEncounterable, IEncounterMatch, IFixedTr
         if (pk is not PK1 pk1)
             return false;
 
-        var req = EncounterUtil1.GetWildCatchRate(Version, Species);
-        return req != pk1.Catch_Rate;
+        var req = EncounterUtil.GetPersonal1(Version, Species).CatchRate;
+        return req != pk1.CatchRate;
     }
 
     #endregion

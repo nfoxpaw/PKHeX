@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.Gen1"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen1"/>.
 /// </summary>
 public record struct EncounterEnumerator1(PKM Entity, EvoCriteria[] Chain) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -124,7 +124,7 @@ public record struct EncounterEnumerator1(PKM Entity, EvoCriteria[] Chain) : IEn
                 { State = YieldState.EventVC; goto case YieldState.EventVC; }
                 State = YieldState.EventGB; goto case YieldState.EventGB;
             case YieldState.EventVC:
-                if (TryGetNext(Encounters1VC.Gifts))
+                if (TryGetNext(Encounters1VC.Gift))
                     return true;
                 goto case YieldState.Fallback;
             case YieldState.EventGB:
@@ -134,7 +134,7 @@ public record struct EncounterEnumerator1(PKM Entity, EvoCriteria[] Chain) : IEn
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -205,6 +205,29 @@ public record struct EncounterEnumerator1(PKM Entity, EvoCriteria[] Chain) : IEn
                 }
                 break;
             }
+        }
+        return false;
+    }
+
+    private bool TryGetNext<T>(T enc) where T : class, IEncounterable, IEncounterMatch
+    {
+        if (Index++ != 0)
+            return false;
+        foreach (var evo in Chain)
+        {
+            if (evo.Species != enc.Species)
+                continue;
+            if (!enc.IsMatchExact(Entity, evo))
+                break;
+            var rating = enc.GetMatchRating(Entity);
+            if (rating == EncounterMatchRating.Match)
+                return SetCurrent(enc);
+            if (rating < Rating)
+            {
+                Deferred = enc;
+                Rating = rating;
+            }
+            break;
         }
         return false;
     }

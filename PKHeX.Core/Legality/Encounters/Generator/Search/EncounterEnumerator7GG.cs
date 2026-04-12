@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.GG"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen7b"/>.
 /// </summary>
 public record struct EncounterEnumerator7GG(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -16,7 +16,7 @@ public record struct EncounterEnumerator7GG(PKM Entity, EvoCriteria[] Chain, Gam
     private bool Yielded;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     readonly object IEnumerator.Current => Current;
 
     public readonly void Reset() => throw new NotSupportedException();
@@ -136,7 +136,7 @@ public record struct EncounterEnumerator7GG(PKM Entity, EvoCriteria[] Chain, Gam
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -145,7 +145,7 @@ public record struct EncounterEnumerator7GG(PKM Entity, EvoCriteria[] Chain, Gam
 
     private void InitializeWildLocationInfo()
     {
-        met = Entity.Met_Location;
+        met = Entity.MetLocation;
     }
 
     private bool TryGetNext<TArea, TSlot>(TArea[] areas)

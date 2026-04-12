@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace PKHeX.Core;
 
@@ -6,7 +6,7 @@ namespace PKHeX.Core;
 /// Generation 2 Time of Encounter enum
 /// </summary>
 [Flags]
-internal enum EncounterTime : byte
+public enum EncounterTime : byte
 {
     Any = 0,
     Morning = 1 << 1,
@@ -14,18 +14,27 @@ internal enum EncounterTime : byte
     Night = 1 << 3,
 }
 
-internal static class EncounterTimeExtension
+public interface IEncounterTime
 {
-    internal static bool Contains(this EncounterTime t1, int t2) => t1 == EncounterTime.Any || (t1 & (EncounterTime)(1 << t2)) != 0;
+    EncounterTime EncounterTime { get; }
+    public int GetRandomTime();
+}
 
-    internal static int RandomValidTime(this EncounterTime t1)
+public static class EncounterTimeExtension
+{
+    extension(EncounterTime t1)
     {
-        var rnd = Util.Rand;
-        int val = rnd.Next(1, 4);
-        if (t1 == EncounterTime.Any)
+        internal bool Contains(int t2) => t1 == EncounterTime.Any || (t1 & (EncounterTime)(1 << t2)) != 0;
+
+        internal int RandomValidTime()
+        {
+            var rnd = Util.Rand;
+            int val = rnd.Next(1, 4);
+            if (t1 == EncounterTime.Any)
+                return val;
+            while (!t1.Contains(val))
+                val = rnd.Next(1, 4);
             return val;
-        while (!t1.Contains(val))
-            val = rnd.Next(1, 4);
-        return val;
+        }
     }
 }

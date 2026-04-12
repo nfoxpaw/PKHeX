@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using PKHeX.Core;
 using static PKHeX.Core.SCBlockUtil;
@@ -50,12 +51,12 @@ public partial class SAV_BlockDump8 : Form
     {
         var extra = Main.Settings.Advanced.PathBlockKeyList;
         if (extra.Length != 0 && !Directory.Exists(extra))
-            return Array.Empty<string>();
+            return [];
 
         var file = Path.Combine(extra, obj.GetType().Name);
         file = $"{file}.txt";
         if (!File.Exists(file))
-            return Array.Empty<string>();
+            return [];
 
         return File.ReadLines(file);
     }
@@ -80,10 +81,14 @@ public partial class SAV_BlockDump8 : Form
     {
         var block = CurrentBlock;
         L_Detail_R.Text = GetBlockSummary(block);
-        RTB_Hex.Text = string.Join(" ", block.Data.Select(z => $"{z:X2}"));
+
+        var sb = new StringBuilder();
+        foreach (var b in block.Data)
+            sb.Append($"{b:X2} ");
+        RTB_Hex.Text = sb.ToString();
 
         var blockName = Metadata.GetBlockName(block, out var obj);
-        if (blockName != null)
+        if (blockName is not null)
         {
             L_BlockName.Visible = true;
             L_BlockName.Text = blockName;
@@ -96,7 +101,7 @@ public partial class SAV_BlockDump8 : Form
         if (ModifierKeys != Keys.Control)
         {
             // Show a PropertyGrid to edit
-            if (obj != null)
+            if (obj is not null)
             {
                 var props = ReflectUtil.GetPropertiesCanWritePublicDeclared(obj.GetType());
                 if (props.Count() > 1 || ModifierKeys == Keys.Shift)
@@ -108,7 +113,7 @@ public partial class SAV_BlockDump8 : Form
             }
 
             var o = SCBlockMetadata.GetEditableBlockObject(block);
-            if (o != null)
+            if (o is not null)
             {
                 PG_BlockView.Visible = true;
                 PG_BlockView.SelectedObject = o;
@@ -197,6 +202,7 @@ public partial class SAV_BlockDump8 : Form
     private void B_LoadOld_Click(object sender, EventArgs e)
     {
         using var ofd = new OpenFileDialog();
+        ofd.Title = MessageStrings.MsgFileLoadSaveSelectGame;
         ofd.FileName = "main";
         if (ofd.ShowDialog() != DialogResult.OK)
             return;
@@ -228,17 +234,15 @@ public partial class SAV_BlockDump8 : Form
         if (!SaveUtil.IsSizeValid((int)f2.Length))
             return;
 
-        var s1 = SaveUtil.GetVariantSAV(p1);
-        if (s1 is not ISCBlockArray w1)
+        if (!SaveUtil.TryGetSaveFile(p1, out var s1) || s1 is not ISCBlockArray w1)
             return;
-        var s2 = SaveUtil.GetVariantSAV(p2);
-        if (s2 is not ISCBlockArray w2)
+        if (!SaveUtil.TryGetSaveFile(p2, out var s2) || s2 is not ISCBlockArray w2)
             return;
 
         // Get an external source of names if available.
         var extra = GetExtraKeyNames(w1);
         var compare = new SCBlockCompare(w1.Accessor, w2.Accessor, extra);
-        richTextBox1.Lines = compare.Summary().ToArray();
+        richTextBox1.Lines = [.. compare.Summary()];
     }
 
     private static void ExportSelectBlock(SCBlock block)
@@ -256,6 +260,7 @@ public partial class SAV_BlockDump8 : Form
         var key = blockTarget.Key;
         var data = blockTarget.Data;
         using var ofd = new OpenFileDialog();
+        ofd.Title = MessageStrings.MsgFileLoadSelectFileBlock;
         ofd.FileName = $"{key:X8}.bin";
         if (ofd.ShowDialog() != DialogResult.OK)
             return;
@@ -297,13 +302,17 @@ public partial class SAV_BlockDump8 : Form
                     CB_Key.DataSource = SortedBlockKeys;
                     Filter = string.Empty;
                 }
-                // Input is hexadecimal number, select the item
-                CB_Key.SelectedValue = hex;
-                return;
+                // Input is hexadecimal number, select the item -- if it exists.
+                bool exists = SortedBlockKeys.Any(z => z.Value == hex);
+                if (exists)
+                {
+                    CB_Key.SelectedValue = hex;
+                    return;
+                }
             }
         }
 
-        if (CB_Key.SelectedItem != null && text.Equals(CB_Key.SelectedText))
+        if (CB_Key.SelectedItem is not null && text.Equals(CB_Key.SelectedText))
             return; // User press enter on selected item
 
         if (Filter.Equals(text, StringComparison.InvariantCultureIgnoreCase))

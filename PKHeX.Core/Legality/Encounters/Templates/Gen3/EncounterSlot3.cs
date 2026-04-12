@@ -1,28 +1,36 @@
+using static PKHeX.Core.PIDType;
+using static PKHeX.Core.SlotType3;
+using static PKHeX.Core.RandomCorrelationRating;
+
 namespace PKHeX.Core;
 
 /// <summary>
-/// Encounter Slot found in <see cref="GameVersion.Gen3"/>.
+/// Encounter Slot found in <see cref="EntityContext.Gen3"/>.
 /// </summary>
 public record EncounterSlot3(EncounterArea3 Parent, ushort Species, byte Form, byte LevelMin, byte LevelMax, byte SlotNumber, byte MagnetPullIndex, byte MagnetPullCount, byte StaticIndex, byte StaticCount)
-    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK3>, IMagnetStatic, INumberedSlot, ISlotRNGType, IRandomCorrelation
+    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK3>, IEncounterSlot3, IRandomCorrelation
 {
-    public int Generation => 3;
+    public byte Generation => 3;
+    ushort ILocation.Location => Location;
     public EntityContext Context => EntityContext.Gen3;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => GetRequiredBall();
+    public byte AreaRate => Parent.Rate;
 
     public AbilityPermission Ability => AbilityPermission.Any12;
     public Shiny Shiny => Shiny.Random;
     public bool IsShiny => false;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
 
     public string Name => $"Wild Encounter ({Version})";
     public string LongName => $"{Name} {Type.ToString().Replace('_', ' ')}";
     public GameVersion Version => Parent.Version;
-    public int Location => Parent.Location;
-    public SlotType Type => Parent.Type;
+    public byte Location => Parent.Location;
+    public SlotType3 Type => Parent.Type;
+    public bool IsSafari => Locations.IsSafariZoneLocation3(Location);
+    public bool IsSafariHoenn => Locations.IsSafariZoneLocation3RSE(Location);
 
-    private Ball GetRequiredBall(Ball fallback = Ball.None) => Locations.IsSafariZoneLocation3(Location) ? Ball.Safari : fallback;
+    private Ball GetRequiredBall(Ball fallback = Ball.None) => IsSafari ? Ball.Safari : fallback;
 
     #region Generating
     PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria) => ConvertToPKM(tr, criteria);
@@ -31,26 +39,40 @@ public record EncounterSlot3(EncounterArea3 Parent, ushort Species, byte Form, b
 
     public PK3 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
-        var version = Version != GameVersion.RSE ? Version : GameVersion.RSE.Contains(tr.Game) ? (GameVersion)tr.Game : GameVersion.E;
+        int language = (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
+        var version = Version switch
+        {
+            GameVersion.RSE => tr.Version switch
+            {
+                GameVersion.R => GameVersion.R,
+                GameVersion.S => GameVersion.S,
+                GameVersion.RS => GameVersion.R,
+                _ => GameVersion.E,
+            },
+            _ => Version
+        };
         var pi = PersonalTable.E[Species];
         var pk = new PK3
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Met_Location = Location,
-            Met_Level = LevelMin,
-            Version = (byte)version,
+            MetLocation = Location,
+            MetLevel = LevelMin,
+            Version = version,
             Ball = (byte)GetRequiredBall(Ball.Poke),
 
-            Language = lang,
-            OT_Name = tr.OT,
-            OT_Gender = tr.Gender,
+            Language = language,
+            OriginalTrainerGender = tr.Gender,
             ID32 = tr.ID32,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
+        // Copy from SaveFile's OT name. Trash bytes here should be pure, but our OT name might not always source from a PK3/SAV3.
+        // Condition the buffer as if it came from a correct SAV3 named after the OT.
+        var ot = pk.OriginalTrainerTrash;
+        ot[..(language == 1 ? 6 : 7)].Fill(0xFF);
+        pk.OriginalTrainerName = EncounterUtil.GetTrainerName(tr, language);
 
         SetPINGA(pk, criteria, pi);
         SetEncounterMoves(pk);
@@ -59,26 +81,23 @@ public record EncounterSlot3(EncounterArea3 Parent, ushort Species, byte Form, b
         return pk;
     }
 
-    private void SetPINGA(PK3 pk, EncounterCriteria criteria, PersonalInfo3 pi)
+    private void SetPINGA(PK3 pk, in EncounterCriteria criteria, PersonalInfo3 pi)
     {
-        int gender = criteria.GetGender(pi);
-        int nature = (int)criteria.GetNature();
-        var ability = criteria.GetAbilityFromNumber(Ability);
-        if (Species == (int)Core.Species.Unown)
+        if (Species != (int)Core.Species.Unown)
         {
-            do
-            {
-                PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, PIDType.Method_1_Unown);
-                ability ^= 1; // some nature-forms cannot have a certain PID-ability set, so just flip it as Unown doesn't have dual abilities.
-            } while (pk.Form != Form);
+            if (criteria.IsSpecifiedIVsAll() && this.SetFromIVs(pk, pi, criteria, pk.E))
+                return;
+            this.SetRandom(pk, pi, criteria, Util.Rand32());
         }
         else
         {
-            PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, PIDType.Method_1);
+            if (criteria.IsSpecifiedIVsAll() && this.SetFromIVsUnown(pk, criteria))
+                return;
+            this.SetRandomUnown(pk, criteria, Util.Rand32());
         }
     }
 
-    protected virtual void SetEncounterMoves(PKM pk) => EncounterUtil1.SetEncounterMoves(pk, Version, LevelMin);
+    protected virtual void SetEncounterMoves(PK3 pk) => EncounterUtil.SetEncounterMoves(pk, Version, LevelMin);
     #endregion
 
     #region Matching
@@ -91,7 +110,7 @@ public record EncounterSlot3(EncounterArea3 Parent, ushort Species, byte Form, b
         if (pk.Format == 3)
         {
             // Must match level exactly.
-            if (!this.IsLevelWithinRange(pk.Met_Level))
+            if (!this.IsLevelWithinRange(pk.MetLevel))
                 return false;
         }
         else
@@ -116,12 +135,16 @@ public record EncounterSlot3(EncounterArea3 Parent, ushort Species, byte Form, b
     private bool IsDeferredSafari3(bool IsSafariBall) => IsSafariBall != Locations.IsSafariZoneLocation3(Location);
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk)
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk)
     {
-        if (Species != (int)Core.Species.Unown)
-            return val is (PIDType.Method_1 or PIDType.Method_2 or PIDType.Method_3 or PIDType.Method_4);
-        return val is (PIDType.Method_1_Unown or PIDType.Method_2_Unown or PIDType.Method_3_Unown or PIDType.Method_4_Unown);
+        var match = Species != (int)Core.Species.Unown
+            ? type is Method_1       or Method_2       or Method_3       or Method_4
+            : type is Method_1_Unown or Method_2_Unown or Method_3_Unown or Method_4_Unown;
+
+        return match ? Match : Mismatch;
     }
 
-    public PIDType GetSuggestedCorrelation() => Species == (int)Core.Species.Unown ? PIDType.Method_1_Unown : PIDType.Method_1;
+    public PIDType GetSuggestedCorrelation() => Species == (int)Core.Species.Unown ? Method_1_Unown : Method_1;
+
+    public byte PressureLevel => Type != Grass ? LevelMax : Parent.GetPressureMax(Species, LevelMax);
 }

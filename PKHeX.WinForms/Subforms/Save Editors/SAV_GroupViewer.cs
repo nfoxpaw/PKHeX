@@ -15,6 +15,8 @@ public sealed partial class SAV_GroupViewer : Form
     private readonly IReadOnlyList<SlotGroup> Groups;
     private readonly SummaryPreviewer Preview = new();
 
+    private PictureBox? Hover;
+
     public int CurrentGroup { get; set; } = -1;
 
     public SAV_GroupViewer(SaveFile sav, IPKMView view, IReadOnlyList<SlotGroup> groups)
@@ -28,30 +30,47 @@ public sealed partial class SAV_GroupViewer : Form
         Regenerate(count);
         CenterToParent();
 
-        MouseWheel += (s, e) => CurrentGroup = e.Delta > 1 ? MoveLeft() : MoveRight();
+        MouseWheel += (_, e) =>
+        {
+            CurrentGroup = e.Delta > 1 ? MoveLeft() : MoveRight();
+            if (Hover is { } pb)
+                HoverSlot(pb);
+        };
 
         var names = groups.Select(z => $"{z.GroupName}").ToArray();
         CB_BoxSelect.Items.AddRange(names);
         CB_BoxSelect.SelectedIndex = GetFirstTeamWithContent(groups);
 
+        if (Application.IsDarkModeEnabled)
+        {
+            WinFormsUtil.InvertToolStripIcons(mnu.Items);
+            WinFormsTranslator.ReformatDark(B_BoxLeft);
+            WinFormsTranslator.ReformatDark(B_BoxRight);
+            WinFormsTranslator.ReformatDark(CB_BoxSelect);
+        }
+
         foreach (PictureBox pb in Box.Entries)
         {
-            pb.Click += (o, args) => OmniClick(pb, args);
+            pb.Click += (_, args) => OmniClick(pb, args);
             pb.ContextMenuStrip = mnu;
-            pb.MouseMove += (o, args) => Preview.UpdatePreviewPosition(args.Location);
-            pb.MouseEnter += (o, args) => HoverSlot(pb, args);
-            pb.MouseLeave += (o, args) => Preview.Clear();
+            pb.MouseMove += (_, args) => Preview.UpdatePreviewPosition(args.Location);
+            pb.MouseEnter += (_, _) => HoverSlot(pb);
+            pb.MouseLeave += (_, _) =>
+            {
+                Preview.Clear();
+                Hover = null;
+            };
         }
-        Closing += (s, e) => Preview.Clear();
+        FormClosing += (_, _) => Preview.Clear();
     }
 
-    private void HoverSlot(object sender, EventArgs e)
+    private void HoverSlot(PictureBox pb)
     {
         var group = Groups[CurrentGroup];
-        var pb = (PictureBox)sender;
         var index = Box.Entries.IndexOf(pb);
         var slot = group.Slots[index];
-        Preview.Show(pb, slot);
+        Preview.Show(pb, slot, group.Type);
+        Hover = pb;
     }
 
     private void OmniClick(object sender, EventArgs e)
@@ -113,17 +132,25 @@ public sealed partial class SAV_GroupViewer : Form
         if (index == CurrentGroup)
             return;
 
-        var (_, slots) = Groups[index];
+        var (_, slots, type) = Groups[index];
         Regenerate(slots.Length);
 
         var sav = SAV;
         for (int i = 0; i < slots.Length; i++)
-            Box.Entries[i].Image = slots[i].Sprite(sav, -1, -1, true);
+            Box.Entries[i].Image = slots[i].Sprite(sav, visibility: GetFlags(slots[i]), storage: type);
 
         if (slotSelected != -1 && (uint)slotSelected < Box.Entries.Count)
             Box.Entries[slotSelected].BackgroundImage = groupSelected != index ? null : SpriteUtil.Spriter.View;
 
         CurrentGroup = index;
+    }
+
+    private SlotVisibilityType GetFlags(PKM pk, bool ignoreLegality = false)
+    {
+        var result = SlotVisibilityType.None;
+        if (!ignoreLegality)
+            result |= SlotVisibilityType.CheckLegalityIndicate;
+        return result;
     }
 
     public int MoveLeft(bool max = false)
@@ -145,8 +172,7 @@ public sealed partial class SAV_GroupViewer : Form
 
     private void ClickView(object sender, EventArgs e)
     {
-        var pb = WinFormsUtil.GetUnderlyingControl<PictureBox>(sender);
-        if (pb == null)
+        if (!WinFormsUtil.TryGetUnderlying<PictureBox>(sender, out var pb))
             return;
         int index = Box.Entries.IndexOf(pb);
 

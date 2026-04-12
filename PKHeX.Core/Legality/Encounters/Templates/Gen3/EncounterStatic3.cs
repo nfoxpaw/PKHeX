@@ -1,3 +1,6 @@
+using System;
+using static PKHeX.Core.RandomCorrelationRating;
+
 namespace PKHeX.Core;
 
 /// <summary>
@@ -6,11 +9,12 @@ namespace PKHeX.Core;
 public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Version)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<PK3>, IFatefulEncounterReadOnly, IRandomCorrelation, IMoveset
 {
-    public int Generation => 3;
+    public byte Generation => 3;
     public EntityContext Context => EntityContext.Gen3;
-    public bool Roaming { get; init; }
-    int ILocation.EggLocation => 0;
-    int ILocation.Location => Location;
+    public bool IsRoaming { get; init; }
+    public bool IsRoamingTruncatedIVs => IsRoaming && Version != GameVersion.E;
+    ushort ILocation.EggLocation => 0;
+    ushort ILocation.Location => Location;
     public bool IsShiny => false;
     private bool Gift => FixedBall == Ball.Poke;
     public Shiny Shiny => Shiny.Random;
@@ -22,7 +26,7 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
 
     public required byte Location { get; init; }
     public byte Form { get; init; }
-    public bool EggEncounter { get; init; }
+    public bool IsEgg { get; init; }
     public Moveset Moves { get; init; }
 
     public string Name => "Static Encounter";
@@ -37,33 +41,37 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
 
     public PK3 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = GetTemplateLanguage(tr);
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
+        int language = GetTemplateLanguage(tr);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.E[Species];
         var pk = new PK3
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Met_Location = Location,
-            Met_Level = LevelMin,
-            Version = (byte)version,
+            MetLocation = Location,
+            MetLevel = LevelMin,
+            Version = version,
             Ball = (byte)(FixedBall != Ball.None ? FixedBall : Ball.Poke),
             FatefulEncounter = FatefulEncounter,
 
-            Language = lang,
-            OT_Name = tr.Language == lang ? tr.OT : lang == 1 ? "ゲーフリ" : "GF",
-            OT_Gender = tr.Gender,
+            Language = language,
+            OriginalTrainerGender = tr.Gender,
             ID32 = tr.ID32,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
+        // Copy from SaveFile's OT name. Trash bytes here should be pure, but our OT name might not always source from a PK3/SAV3.
+        // Condition the buffer as if it came from a correct SAV3 named after the OT.
+        var ot = pk.OriginalTrainerTrash;
+        ot[..(language == 1 ? 6 : 7)].Fill(0xFF);
+        pk.OriginalTrainerName = EncounterUtil.GetTrainerName(tr, language);
 
-        if (EggEncounter)
+        if (IsEgg)
         {
             // Fake as hatched.
-            pk.Met_Level = EggStateLegality.EggMetLevel34;
-            pk.Met_Location = version is GameVersion.FR or GameVersion.LG
+            pk.MetLevel = EggStateLegality.EggMetLevel34;
+            pk.MetLocation = version is GameVersion.FR or GameVersion.LG
                 ? Locations.HatchLocationFRLG
                 : Locations.HatchLocationRSE;
         }
@@ -72,7 +80,7 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
         if (Moves.HasMoves)
             pk.SetMoves(Moves);
         else
-            EncounterUtil1.SetEncounterMoves(pk, Version, LevelMin);
+            EncounterUtil.SetEncounterMoves(pk, Version, LevelMin);
 
         pk.ResetPartyStats();
         return pk;
@@ -88,20 +96,133 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
         if (Species is (ushort)Core.Species.Deoxys && tr.Language == 1)
             return (int)LanguageID.English;
 
-        return (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
+        return (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
     }
 
-    private void SetPINGA(PK3 pk, EncounterCriteria criteria, PersonalInfo3 pi)
+    private void SetPINGA(PK3 pk, in EncounterCriteria criteria, PersonalInfo3 pi)
     {
-        int gender = criteria.GetGender(pi);
-        int nature = (int)criteria.GetNature();
-        var ability = criteria.GetAbilityFromNumber(Ability);
-        var type = Roaming && Version != GameVersion.E ? PIDType.Method_1_Roamer : PIDType.Method_1;
-        do
+        var gr = pi.Gender;
+        if (IsRoamingTruncatedIVs)
         {
-            PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, type);
-        } while (Shiny == Shiny.Never && pk.IsShiny);
+            SetRoamerPINGA(pk, criteria);
+            return;
+        }
+        if (criteria.IsSpecifiedIVsAll())
+        {
+            if (TrySetMethod1(pk, criteria, gr))
+                return;
+        }
+        SetMethod1(pk, criteria, gr, Util.Rand32());
     }
+
+    private static bool SetRoamerPINGA(PK3 pk, in EncounterCriteria criteria)
+    {
+        // For every possible 8-bit IV combination, check if it meets the criteria.
+        var id32 = pk.ID32;
+        for (uint i = 0; i <= byte.MaxValue; i++)
+        {
+            var iv32 = i;
+
+            // IVs can only ever be Hidden Power: Fighting. Don't bother checking if it matches.
+            if (!criteria.IsSatisfiedIVs(iv32))
+                continue;
+
+            // Satisfactory IVs; now check PID/nature/shininess.
+            var frame = iv32 << 16;
+            for (uint hi = 0; hi <= byte.MaxValue; hi++)
+            {
+                for (uint lo = 0; lo <= ushort.MaxValue; lo++)
+                {
+                    var state = frame | (hi << 24) | lo;
+                    var rand2 = LCRNG.Prev16(ref state);
+                    var rand1 = LCRNG.Prev16(ref state);
+                    var pid = (rand2 << 16) | rand1;
+                    if (criteria.IsSpecifiedNature() && !criteria.IsSatisfiedNature((Nature)(pid % 25)))
+                        continue;
+                    bool shiny = ShinyUtil.GetIsShiny3(id32, pid);
+                    if (criteria.Shiny.IsShiny() != shiny)
+                        continue;
+
+                    pk.PID = pid;
+                    pk.IV32 = iv32;
+                    pk.RefreshAbility(0);
+                    return true;
+                }
+            }
+        }
+        // Should never happen, but just in case.
+        SetMethod1(pk, criteria, 255, Util.Rand32());
+        pk.IV32 &= 0xFF; // truncate to 8 bits (value storage fail)
+        return false;
+    }
+
+    private static bool TrySetMethod1(PK3 pk, in EncounterCriteria criteria, byte gr)
+    {
+        criteria.GetCombinedIVs(out var iv1, out var iv2);
+
+        Span<uint> seeds = stackalloc uint[LCRNG.MaxCountSeedsIV];
+        var count = LCRNGReversal.GetSeedsIVs(seeds, iv1 << 16, iv2 << 16);
+        foreach (var s in seeds[..count])
+        {
+            var seed = LCRNG.Prev2(s); // Unwind the RNG to get the real origin seed for the PID/IV
+            var pid = ClassicEraRNG.GetSequentialPID(seed);
+            if (criteria.IsSpecifiedNature() && !criteria.IsSatisfiedNature((Nature)(pid % 25)))
+                continue;
+
+            var gender = EntityGender.GetFromPIDAndRatio(pid, gr);
+            if (criteria.IsSpecifiedGender() && !criteria.IsSatisfiedGender(gender))
+                continue;
+
+            var abit = (int)(pid & 1);
+            if (criteria.IsSpecifiedAbility() && !criteria.IsSatisfiedAbility(abit))
+                continue;
+
+            pk.PID = pid;
+            pk.IV32 |= iv2 << 15 | iv1;
+            pk.Gender = gender;
+            pk.RefreshAbility(abit);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void SetMethod1(PK3 pk, in EncounterCriteria criteria, byte gr, uint seed)
+    {
+        var id32 = pk.ID32;
+        bool filterIVs = criteria.IsSpecifiedIVs(2);
+        while (true)
+        {
+            var pid = ClassicEraRNG.GetSequentialPID(ref seed);
+            var shiny = ShinyUtil.GetIsShiny3(id32, pid);
+            if (criteria.Shiny.IsShiny() != shiny)
+                continue;
+
+            if (criteria.IsSpecifiedNature() && !criteria.IsSatisfiedNature((Nature)(pid % 25)))
+                continue;
+
+            var gender = EntityGender.GetFromPIDAndRatio(pid, gr);
+            if (criteria.IsSpecifiedGender() && !criteria.IsSatisfiedGender(gender))
+                continue;
+
+            var abit = (int)(pid & 1);
+            if (criteria.IsSpecifiedAbility() && !criteria.IsSatisfiedAbility(abit))
+                continue;
+
+            var iv32 = ClassicEraRNG.GetSequentialIVs(ref seed);
+            if (criteria.IsSpecifiedHiddenPower() && !criteria.IsSatisfiedHiddenPower(iv32))
+                continue;
+            if (filterIVs && !criteria.IsSatisfiedIVs(iv32))
+                continue;
+
+            pk.PID = pid;
+            pk.IV32 |= iv32;
+            pk.Gender = gender;
+            pk.RefreshAbility(abit);
+            break;
+        }
+    }
+
     #endregion
 
     #region Matching
@@ -125,7 +246,7 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
         return EncounterMatchRating.Match;
     }
 
-    private bool IsDeferredSafari3(bool IsSafariBall) => IsSafariBall != Locations.IsSafariZoneLocation3(Location);
+    private bool IsDeferredSafari3(bool isSafariBall) => isSafariBall != Locations.IsSafariZoneLocation3(Location);
 
     private static bool IsMatchEggLocation(PKM pk)
     {
@@ -133,16 +254,16 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
             return true;
 
         var expect = pk is PB8 ? Locations.Default8bNone : 0;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private bool IsMatchLevel(PKM pk, EvoCriteria evo)
     {
         if (pk.Format != 3) // Met Level lost on PK3=>PK4
             return evo.LevelMax >= Level;
-        if (!EggEncounter)
-            return pk.Met_Level == Level;
-        return pk is { Met_Level: EggStateLegality.EggMetLevel34, CurrentLevel: >= 5 }; // met level 0, origin level 5
+        if (!IsEgg)
+            return pk.MetLevel == Level;
+        return pk is { MetLevel: EggStateLegality.EggMetLevel34, CurrentLevel: >= 5 }; // met level 0, origin level 5
     }
 
     private bool IsMatchLocation(PKM pk)
@@ -150,11 +271,11 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
         if (pk.Format != 3)
             return true; // transfer location verified later
 
-        if (EggEncounter)
-            return !pk.IsEgg || pk.Met_Location == Location;
+        if (IsEgg)
+            return !pk.IsEgg || pk.MetLocation == Location;
 
-        var met = pk.Met_Location;
-        if (!Roaming)
+        var met = pk.MetLocation;
+        if (!IsRoaming)
             return Location == met;
 
         // Route 101-138
@@ -176,29 +297,37 @@ public sealed record EncounterStatic3(ushort Species, byte Level, GameVersion Ve
     }
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk)
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk)
     {
         var version = pk.Version;
-        if (version is (int)GameVersion.E)
-            return val is PIDType.Method_1;
-        if (version is (int)GameVersion.FR or(int) GameVersion.LG)
-            return Roaming ? IsRoamerPIDIV(val, pk) : val is PIDType.Method_1;
-        // RS, roamer glitch && RSBox s/w emulation => method 4 available
-        return Roaming ? IsRoamerPIDIV(val, pk) : val is (PIDType.Method_1 or PIDType.Method_4);
+        if (version is GameVersion.E)
+            return type is PIDType.Method_1 ? Match : Mismatch;
+
+        if (IsRoaming) // Glitched IVs
+            return IsRoamerPIDIV(type, pk) ? Match : Mismatch;
+
+        if (type is PIDType.Method_1)
+            return Match;
+        // RS: Only Method 1, but RSBox s/w emulation can yield Method 4.
+        if (version is GameVersion.R or GameVersion.S)
+            return type is PIDType.Method_4 ? NotIdeal : Mismatch;
+        // FR/LG: Only Method 1, but Togepi gift can be Method 4 via PID modulo VBlank abuse
+        return type is PIDType.Method_4 && Species is (ushort)Core.Species.Togepi ? NotIdeal : Mismatch;
     }
 
     private static bool IsRoamerPIDIV(PIDType val, PKM pk)
     {
-        // Roamer PIDIV is always Method 1.
-        // M1 is checked before M1R. A M1R PIDIV can also be a M1 PIDIV, so check that collision.
+        // Roamer PID/IV is always Method 1.
+        // M1 is checked before M1R. A M1R PID/IV can also be a M1 PID/IV, so check that collision.
         if (PIDType.Method_1_Roamer == val)
             return true;
         if (PIDType.Method_1 != val)
             return false;
 
         // only 8 bits are stored instead of 32 -- 5 bits HP, 3 bits for ATK.
-        // return pk.IV32 <= 0xFF;
-        return pk is { IV_DEF: 0, IV_SPE: 0, IV_SPA: 0, IV_SPD: 0, IV_ATK: <= 7 };
+        // return pk.IV32 <= 0xFF; -- not always in right order, and can have nickname flagged.
+        var ivs = pk.GetIVs();
+        return ivs <= 0xFF;
     }
 
     public PIDType GetSuggestedCorrelation() => PIDType.Method_1;

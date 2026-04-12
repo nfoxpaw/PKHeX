@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.Gen2"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen2"/> encounters.
 /// </summary>
 public record struct EncounterPossible2(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version, PKM Entity) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -61,8 +61,8 @@ public record struct EncounterPossible2(EvoCriteria[] Chain, EncounterTypeGroup 
 
             case YieldState.Bred:
                 // try with specific version, for yielded metadata purposes.
-                var ver = Version is GameVersion.GD or GameVersion.SI ? Version : GameVersion.GS;
-                if (!EncounterGenerator2.TryGetEgg(Chain, ver, out var egg))
+                var version = Version is GameVersion.GD or GameVersion.SI ? Version : GameVersion.GS;
+                if (!EncounterGenerator2.TryGetEgg(Chain, version, out var egg))
                     goto case YieldState.TradeStart;
                 State = ParseSettings.AllowGen2Crystal(Entity) ? YieldState.BredCrystal : YieldState.TradeStart;
                 return SetCurrent(egg);
@@ -169,7 +169,7 @@ public record struct EncounterPossible2(EvoCriteria[] Chain, EncounterTypeGroup 
                     return SetCurrent(Encounters2.CelebiVC);
                 break;
             case YieldState.EventGB:
-                if (TryGetNext(Encounters2GBEra.StaticEventsGB))
+                if (TryGetNext(Encounters2GBEra.Gifts))
                     return true;
                 break;
         }

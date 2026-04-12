@@ -15,7 +15,7 @@ public partial class SAV_Capture7GG : Form
     private ushort Index;
     private bool Loading;
 
-    public SAV_Capture7GG(SaveFile sav)
+    public SAV_Capture7GG(SAV7b sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
@@ -31,7 +31,7 @@ public partial class SAV_Capture7GG : Form
         // Fill List
         var species = GameInfo.FilteredSources.Species.Where(z => IsLegalSpecies(z.Value)).ToList();
         CB_Species.InitializeBinding();
-        CB_Species.DataSource = new BindingSource(species, null);
+        CB_Species.DataSource = new BindingSource(species, string.Empty);
         foreach (var (text, value) in species.OrderBy(z => z.Value))
             LB_Species.Items.Add($"{value:000}: {text}");
 
@@ -123,7 +123,7 @@ public partial class SAV_Capture7GG : Form
         Captured.SetAllTransferred((uint)NUD_SpeciesTransferred.Value, Dex);
 
         GetEntry();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private void B_SumTotal_Click(object sender, EventArgs e)
@@ -131,7 +131,7 @@ public partial class SAV_Capture7GG : Form
         SetEntry();
         NUD_TotalCaptured.Value = Captured.CalculateTotalCaptured();
         NUD_TotalTransferred.Value = Captured.CalculateTotalTransferred();
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
     private static void ToggleMax(NumericUpDown nud) => nud.Value = (nud.Value != nud.Maximum) ? nud.Maximum : 0;

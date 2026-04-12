@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.Gen6"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen6"/>.
 /// </summary>
 public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -16,7 +16,7 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
     private bool Yielded;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     readonly object IEnumerator.Current => Current;
 
     public readonly void Reset() => throw new NotSupportedException();
@@ -66,10 +66,10 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
                 if (Chain.Length == 0)
                     break;
 
-                if (Entity.Met_Location == Locations.LinkTrade6NPC)
+                if (Entity.MetLocation == Locations.LinkTrade6NPC)
                     goto case YieldState.TradeStart;
 
-                if (Entity.FatefulEncounter || Entity.Met_Location == Locations.LinkGift6)
+                if (Entity.FatefulEncounter || Entity.MetLocation == Locations.LinkGift6)
                 { State = YieldState.Event; goto case YieldState.Event; }
                 goto case YieldState.Bred;
 
@@ -85,7 +85,7 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
                 Index = 0; goto case YieldState.Bred;
 
             case YieldState.Bred:
-                if (!Locations.IsEggLocationBred6(Entity.Egg_Location))
+                if (!Locations.IsEggLocationBred6(Entity.EggLocation))
                     goto case YieldState.StartCaptures;
                 if (!EncounterGenerator6.TryGetEgg(Chain, Version, out var egg))
                     break;
@@ -93,22 +93,22 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
                 return SetCurrent(egg);
             case YieldState.BredTrade:
                 State = YieldState.BredSplit;
-                if (Entity.Egg_Location != Locations.LinkTrade6)
+                if (Entity.EggLocation != Locations.LinkTrade6)
                     goto case YieldState.BredSplit;
-                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg)Current.Encounter);
+                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg6)Current.Encounter);
                 return SetCurrent(egg);
             case YieldState.BredSplit:
                 if (Chain[^1].Species is (int)Species.Togepi or (int)Species.Wynaut)
                     goto case YieldState.StartCaptures;
                 State = YieldState.BredSplitTrade;
-                if (!EncounterGenerator6.TryGetSplit((EncounterEgg)Current.Encounter, Chain, out egg))
+                if (!EncounterGenerator6.TryGetSplit((EncounterEgg6)Current.Encounter, Chain, out egg))
                     break;
                 return SetCurrent(egg);
             case YieldState.BredSplitTrade:
                 State = YieldState.StartCaptures;
-                if (Entity.Egg_Location != Locations.LinkTrade6)
+                if (Entity.EggLocation != Locations.LinkTrade6)
                     goto case YieldState.StartCaptures;
-                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg)Current.Encounter);
+                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg6)Current.Encounter);
                 return SetCurrent(egg);
 
             case YieldState.TradeStart:
@@ -204,7 +204,7 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -213,7 +213,7 @@ public record struct EncounterEnumerator6(PKM Entity, EvoCriteria[] Chain, GameV
 
     private void InitializeWildLocationInfo()
     {
-        met = Entity.Met_Location;
+        met = Entity.MetLocation;
     }
 
     private bool TryGetNext<TArea, TSlot>(TArea[] areas)

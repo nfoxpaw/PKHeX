@@ -1,6 +1,5 @@
 using System;
-
-using static PKHeX.Core.StringConverter12;
+using static PKHeX.Core.StringConverter1;
 
 namespace PKHeX.Core;
 
@@ -9,10 +8,14 @@ namespace PKHeX.Core;
 /// </summary>
 public static class StringConverter2KOR
 {
+    // Mail
+    public const byte LineBreakCode = 0x59;
+    public const char LineBreak = StringConverter2.LineBreak;
+
     /// <summary>
     /// Checks if any of the characters inside <see cref="str"/> are from the special Korean codepoint pages.
     /// </summary>
-    public static bool GetIsG2Korean(ReadOnlySpan<char> str)
+    public static bool GetIsKorean(ReadOnlySpan<char> str)
     {
         foreach (var c in str)
         {
@@ -42,9 +45,9 @@ public static class StringConverter2KOR
     {
         if (data.Length == 0)
             return 0;
-        if (data[0] == G1TradeOTCode) // In-game Trade
+        if (data[0] == TradeOTCode) // In-game Trade
         {
-            result[0] = G1TradeOT;
+            result[0] = TradeOT;
             return 1;
         }
 
@@ -70,11 +73,45 @@ public static class StringConverter2KOR
             }
 
             var c = table[value];
-            if (c == G1Terminator) // Stop if Terminator
+            if (c == Terminator) // Stop if Terminator
                 break;
             result[ctr++] = c;
         }
         return ctr;
+    }
+
+    /// <summary>
+    /// Gets the count of characters in the data.
+    /// </summary>
+    public static int GetStringLength(ReadOnlySpan<byte> data)
+    {
+        int length = 0;
+        for (var i = 0; i < data.Length; i++)
+        {
+            byte value = data[i];
+            if (value is TableInvalid or TerminatorCode)
+                break;
+            if (value <= TableMax)
+                i++; // Korean char takes 2 bytes
+            length++;
+        }
+        return length;
+    }
+
+    /// <summary>
+    /// Gets the index of the first terminator in the data.
+    /// </summary>
+    public static int GetTerminatorIndex(ReadOnlySpan<byte> data)
+    {
+        for (var i = 0; i < data.Length; i++)
+        {
+            byte value = data[i];
+            if (value is TableInvalid or TerminatorCode)
+                return i;
+            if (value <= TableMax)
+                i++; // Korean char takes 2 bytes
+        }
+        return -1;
     }
 
     /// <summary>
@@ -91,15 +128,15 @@ public static class StringConverter2KOR
         if (option is StringConverterOption.ClearZero)
             destBuffer.Clear();
         else if (option is StringConverterOption.Clear50)
-            destBuffer.Fill(G1TerminatorCode);
+            destBuffer.Fill(TerminatorCode);
 
         if (value.Length == 0)
             return 0;
-        // Can't get Gen1 In-Game trades with this char, but handle it anyways since the game can handle it.
-        if (value[0] == G1TradeOT) // Handle "[TRAINER]"
+        // Korean games can't trade for Gen1 In-Game trades with this char, but handle it anyway since the game can handle it.
+        if (value[0] == TradeOT) // Handle "[TRAINER]"
         {
-            destBuffer[0] = G1TradeOTCode;
-            destBuffer[1] = G1TerminatorCode;
+            destBuffer[0] = TradeOTCode;
+            destBuffer[1] = TerminatorCode;
             return 2;
         }
 
@@ -108,7 +145,7 @@ public static class StringConverter2KOR
 
         int ctr = LoadCharacters(destBuffer, value);
         if (ctr < value.Length)
-            destBuffer[ctr++] = G1TerminatorCode;
+            destBuffer[ctr++] = TerminatorCode;
         return ctr;
     }
 
@@ -128,7 +165,7 @@ public static class StringConverter2KOR
             else
             {
                 var index = Table0.IndexOf(c);
-                if (index is -1 or G1TerminatorCode)
+                if (index is -1 or TerminatorCode)
                     break;
                 if (ctr + 1 > destBuffer.Length)
                     break; // adding 1 character will overflow requested buffer cap
@@ -177,7 +214,7 @@ public static class StringConverter2KOR
     }
 
     #region Gen 2 Korean Character Tables
-    private const char NULL = G1Terminator;
+    private const char NULL = Terminator;
     private const byte TableInvalid = 0;
     private const byte TableMin = 1;
     private const byte TableMax = 11;
@@ -198,8 +235,8 @@ public static class StringConverter2KOR
         _ => throw new ArgumentOutOfRangeException(nameof(table)),
     };
 
-    private static ReadOnlySpan<char> Table1 => new[]
-    {
+    private static ReadOnlySpan<char> Table1 =>
+    [
         NULL, '가', '각', '간', '갇', '갈', '갉', '갊', '감', '갑', '값', '갓', '갔', '강', '갖', '갗',
         '같', '갚', '갛', '개', '객', '갠', '갤', '갬', '갭', '갯', '갰', '갱', '갸', '갹', '갼', '걀',
         '걋', '걍', '걔', '걘', '걜', '거', '걱', '건', '걷', '걸', '걺', '검', '겁', '것', '겄', '겅',
@@ -216,10 +253,10 @@ public static class StringConverter2KOR
         NULL, '깹', '깻', '깼', '깽', '꺄', '꺅', '꺌', '꺼', '꺽', '꺾', '껀', '껄', '껌', '껍', '껏',
         '껐', '껑', '께', '껙', '껜', '껨', '껫', '껭', '껴', '껸', '껼', '꼇', '꼈', '꼍', '꼐', '꼬',
         '꼭', '꼰', '꼲', '꼴', '꼼', '꼽', '꼿', '꽁', '꽂', '꽃', '꽈', '꽉', '꽐', '꽜', '꽝', '꽤',
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table2 => new[]
-    {
+    private static ReadOnlySpan<char> Table2 =>
+    [
         '꽥', '꽹', '꾀', '꾄', '꾈', '꾐', '꾑', '꾕', '꾜', '꾸', '꾹', '꾼', '꿀', '꿇', '꿈', '꿉',
         '꿋', '꿍', '꿎', '꿔', '꿜', '꿨', '꿩', '꿰', '꿱', '꿴', '꿸', '뀀', '뀁', '뀄', '뀌', '뀐',
         '뀔', '뀜', '뀝', '뀨', '끄', '끅', '끈', '끊', '끌', '끎', '끓', '끔', '끕', '끗', '끙', NULL,
@@ -236,10 +273,10 @@ public static class StringConverter2KOR
         '닉', '닌', '닐', '닒', '님', '닙', '닛', '닝', '닢', '다', '닥', '닦', '단', '닫', '달', '닭',
         '닮', '닯', '닳', '담', '답', '닷', '닸', '당', '닺', '닻', '닿', '대', '댁', '댄', '댈', '댐',
         '댑', '댓', '댔', '댕', NULL, '더', '덕', '덖', '던', '덛', '덜', '덞', '덟', '덤', '덥', NULL,
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table3 => new[]
-    {
+    private static ReadOnlySpan<char> Table3 =>
+    [
         NULL, '덧', '덩', '덫', '덮', '데', '덱', '덴', '델', '뎀', '뎁', '뎃', '뎄', '뎅', '뎌', '뎐',
         '뎔', '뎠', '뎡', '뎨', '뎬', '도', '독', '돈', '돋', '돌', '돎', NULL, '돔', '돕', '돗', '동',
         '돛', '돝', '돠', '돤', '돨', '돼', '됐', '되', '된', '될', '됨', '됩', '됫', '됴', '두', '둑',
@@ -256,10 +293,10 @@ public static class StringConverter2KOR
         '뢔', '래', '랙', '랜', '랠', '램', '랩', '랫', '랬', '랭', '랴', '략', '랸', '럇', '량', '러',
         '럭', '런', '럴', '럼', '럽', '럿', '렀', '렁', '렇', '레', '렉', '렌', '렐', '렘', '렙', '렛',
         '렝', '려', '력', '련', '렬', '렴', '렵', '렷', '렸', '령', '례', '롄', '롑', '롓', '로', '록',
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table4 => new[]
-    {
+    private static ReadOnlySpan<char> Table4 =>
+    [
         '론', '롤', '롬', '롭', '롯', '롱', '롸', '롼', '뢍', '뢨', '뢰', '뢴', '뢸', '룀', '룁', '룃',
         '룅', '료', '룐', '룔', '룝', '룟', '룡', '루', '룩', '룬', '룰', '룸', '룹', '룻', '룽', '뤄',
         '뤘', '뤠', '뤼', '뤽', '륀', '륄', '륌', '륏', '륑', '류', '륙', '륜', '률', '륨', '륩', NULL,
@@ -276,10 +313,10 @@ public static class StringConverter2KOR
         '밀', '밂', '밈', '밉', '밋', '밌', '밍', '및', '밑', '바', '박', '밖', '밗', '반', '받', '발',
         '밝', '밞', '밟', '밤', '밥', '밧', '방', '밭', '배', '백', '밴', '밸', '뱀', '뱁', '뱃', '뱄',
         '뱅', '뱉', '뱌', '뱍', '뱐', '뱝', '버', '벅', '번', '벋', '벌', '벎', '범', '법', '벗', NULL,
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table5 => new[]
-    {
+    private static ReadOnlySpan<char> Table5 =>
+    [
         NULL, '벙', '벚', '베', '벡', '벤', '벧', '벨', '벰', '벱', '벳', '벴', '벵', '벼', '벽', '변',
         '별', '볍', '볏', '볐', '병', '볕', '볘', '볜', '보', '복', '볶', '본', '볼', '봄', '봅', '봇',
         '봉', '봐', '봔', '봤', '봬', '뵀', '뵈', '뵉', '뵌', '뵐', '뵘', '뵙', '뵤', '뵨', '부', '북',
@@ -296,10 +333,10 @@ public static class StringConverter2KOR
         NULL, '샥', '샨', '샬', '샴', '샵', '샷', '샹', '섀', '섄', '섈', '섐', '섕', '서', '석', '섞',
         '섟', '선', '섣', '설', '섦', '섧', '섬', '섭', '섯', '섰', '성', '섶', '세', '섹', '센', '셀',
         '셈', '셉', '셋', '셌', '셍', '셔', '셕', '션', '셜', '셤', '셥', '셧', '셨', '셩', '셰', '셴',
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table6 => new[]
-    {
+    private static ReadOnlySpan<char> Table6 =>
+    [
         '셸', '솅', '소', '속', '솎', '손', '솔', '솖', '솜', '솝', '솟', '송', '솥', '솨', '솩', '솬',
         '솰', '솽', '쇄', '쇈', '쇌', '쇔', '쇗', '쇘', '쇠', '쇤', '쇨', '쇰', '쇱', '쇳', '쇼', '쇽',
         '숀', '숄', '숌', '숍', '숏', '숑', '수', '숙', '순', '숟', '술', '숨', '숩', '숫', '숭', '쌰',
@@ -316,10 +353,10 @@ public static class StringConverter2KOR
         '압', '앗', '았', '앙', '앝', '앞', '애', '액', '앤', '앨', '앰', '앱', '앳', '앴', '앵', '야',
         '약', '얀', '얄', '얇', '얌', '얍', '얏', '양', '얕', '얗', '얘', '얜', '얠', '얩', '어', '억',
         '언', '얹', '얻', '얼', '얽', '얾', '엄', '업', '없', '엇', '었', '엉', '엊', '엌', '엎', NULL,
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table7 => new[]
-    {
+    private static ReadOnlySpan<char> Table7 =>
+    [
         NULL, '에', '엑', '엔', '엘', '엠', '엡', '엣', '엥', '여', '역', '엮', '연', '열', '엶', '엷',
         '염', '엽', '엾', '엿', '였', '영', '옅', '옆', '옇', '예', '옌', '옐', '옘', '옙', '옛', '옜',
         '오', '옥', '온', '올', '옭', '옮', '옰', '옳', '옴', '옵', '옷', '옹', '옻', '와', '왁', '완',
@@ -336,10 +373,10 @@ public static class StringConverter2KOR
         NULL, '점', '접', '젓', '정', '젖', '제', '젝', '젠', '젤', '젬', '젭', '젯', '젱', '져', '젼',
         '졀', '졈', '졉', '졌', '졍', '졔', '조', '족', '존', '졸', '졺', '좀', '좁', '좃', '종', '좆',
         '좇', '좋', '좌', '좍', '좔', '좝', '좟', '좡', '좨', '좼', '좽', '죄', '죈', '죌', '죔', '죕',
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table8 => new[]
-    {
+    private static ReadOnlySpan<char> Table8 =>
+    [
         '죗', '죙', '죠', '죡', '죤', '죵', '주', '죽', '준', '줄', '줅', '줆', '줌', '줍', '줏', '중',
         '줘', '줬', '줴', '쥐', '쥑', '쥔', '쥘', '쥠', '쥡', '쥣', '쥬', '쥰', '쥴', '쥼', '즈', '즉',
         '즌', '즐', '즘', '즙', '즛', '증', '지', '직', '진', '짇', '질', '짊', '짐', '집', '짓', NULL,
@@ -356,10 +393,10 @@ public static class StringConverter2KOR
         '촛', '총', '촤', '촨', '촬', '촹', '최', '쵠', '쵤', '쵬', '쵭', '쵯', '쵱', '쵸', '춈', '추',
         '축', '춘', '출', '춤', '춥', '춧', '충', '춰', '췄', '췌', '췐', '취', '췬', '췰', '췸', '췹',
         '췻', '췽', '츄', '츈', '츌', '츔', '츙', '츠', '측', '츤', '츨', '츰', '츱', '츳', '층', NULL,
-    };
+    ];
 
-    private static ReadOnlySpan<char> Table9 => new[]
-    {
+    private static ReadOnlySpan<char> Table9 =>
+    [
         NULL, '치', '칙', '친', '칟', '칠', '칡', '침', '칩', '칫', '칭', '카', '칵', '칸', '칼', '캄',
         '캅', '캇', '캉', '캐', '캑', '캔', '캘', '캠', '캡', '캣', '캤', '캥', '캬', '캭', '컁', '커',
         '컥', '컨', '컫', '컬', '컴', '컵', '컷', '컸', '컹', '케', '켁', '켄', '켈', '켐', '켑', '켓',
@@ -376,10 +413,10 @@ public static class StringConverter2KOR
         NULL, '퉤', '튀', '튁', '튄', '튈', '튐', '튑', '튕', '튜', '튠', '튤', '튬', '튱', '트', '특',
         '튼', '튿', '틀', '틂', '틈', '틉', '틋', '틔', '틘', '틜', '틤', '틥', '티', '틱', '틴', '틸',
         '팀', '팁', '팃', '팅', '파', '팍', '팎', '판', '팔', '팖', '팜', '팝', '팟', '팠', '팡', '팥',
-    };
+    ];
 
-    private static ReadOnlySpan<char> TableA => new[]
-    {
+    private static ReadOnlySpan<char> TableA =>
+    [
         '패', '팩', '팬', '팰', '팸', '팹', '팻', '팼', '팽', '퍄', '퍅', '퍼', '퍽', '펀', '펄', '펌',
         '펍', '펏', '펐', '펑', '페', '펙', '펜', '펠', '펨', '펩', '펫', '펭', '펴', '편', '펼', '폄',
         '폅', '폈', '평', '폐', '폘', '폡', '폣', '포', '폭', '폰', '폴', '폼', '폽', '폿', '퐁', NULL,
@@ -396,10 +433,10 @@ public static class StringConverter2KOR
         '훵', '훼', '훽', '휀', '휄', '휑', '휘', '휙', '휜', '휠', '휨', '휩', '휫', '휭', '휴', '휵',
         '휸', '휼', '흄', '흇', '흉', '흐', '흑', '흔', '흖', '흗', '흘', '흙', '흠', '흡', '흣', '흥',
         '흩', '희', '흰', '흴', '흼', '흽', '힁', '히', '힉', '힌', '힐', '힘', '힙', '힛', '힝', NULL,
-    };
+    ];
 
-    private static ReadOnlySpan<char> TableB => new[]
-    {
+    private static ReadOnlySpan<char> TableB =>
+    [
         'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'ㄲ', 'ㄸ',
         'ㅃ', 'ㅆ', 'ㅉ', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         'ㅏ', 'ㅑ', 'ㅓ', 'ㅕ', 'ㅗ', 'ㅛ', 'ㅜ', 'ㅠ', 'ㅡ', 'ㅣ', 'ㅐ', 'ㅒ', 'ㅔ', 'ㅖ', 'ㅘ', 'ㅙ',
@@ -416,18 +453,19 @@ public static class StringConverter2KOR
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         '０', '１', '２', '３', '４', '５', '６', '７', '８', '９', NULL, NULL, NULL, NULL, NULL, '　',
-    };
+    ];
 
     // In transporter's code, none of these glyphs are legitimately accessible via keyboard.
     private const char NUL = NULL;
-    private static ReadOnlySpan<char> Table0 => new[]
-    {
+    private const char RET = LineBreak; // Mail, NUL in Transporter
+    private static ReadOnlySpan<char> Table0 =>
+    [
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
-        NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
+        NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, RET, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, ' ',
         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
@@ -438,7 +476,7 @@ public static class StringConverter2KOR
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL,
         NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, NUL, '♂',
         NUL, '×', NUL, '/', NUL, '♀', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    };
+    ];
 
     #endregion
 }

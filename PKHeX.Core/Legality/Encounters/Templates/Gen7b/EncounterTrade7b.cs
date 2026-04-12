@@ -5,22 +5,25 @@ namespace PKHeX.Core;
 /// <summary>
 /// Generation 7 LGP/E Trade Encounter
 /// </summary>
-public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEncounterMatch, IFixedTrainer, IEncounterConvertible<PB7>
+public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEncounterMatch, IEncounterConvertible<PB7>,
+    IFixedTrainer, IFixedIVSet, ITrainerID32ReadOnly
 {
-    public int Generation => 7;
+    public byte Generation => 7;
     public EntityContext Context => EntityContext.Gen7b;
-    public int Location => Locations.LinkTrade6NPC;
+    public ushort Location => Locations.LinkTrade6NPC;
     public Shiny Shiny => Shiny.Random;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.Poke;
     public bool IsShiny => false;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
     public bool IsFixedTrainer => true;
     public AbilityPermission Ability => AbilityPermission.Any12;
 
-    public required string[] TrainerNames { get; init; }
+    public required ReadOnlyMemory<string> TrainerNames { get; init; }
 
     public required uint ID32 { get; init; }
+    public ushort SID16 => (ushort)(ID32 >> 16);
+    public ushort TID16 => (ushort)ID32;
     public required byte OTGender { get; init; }
     public required ushort Species { get; init; }
     public required byte Form { get; init; }
@@ -43,39 +46,40 @@ public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEn
 
     public PB7 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.GG[Species, Form];
+        var date = EncounterDate.GetDateSwitch();
         var pk = new PB7
         {
             Species = Species,
             Form = Form,
             CurrentLevel = Level,
-            Met_Location = Location,
-            Met_Level = Level,
-            MetDate = EncounterDate.GetDateSwitch(),
+            MetLocation = Location,
+            MetLevel = Level,
+            MetDate = date,
             Ball = (byte)FixedBall,
 
             ID32 = ID32,
-            Version = (byte)version,
-            Language = lang,
-            OT_Gender = OTGender,
-            OT_Name = TrainerNames[lang],
+            Version = version,
+            Language = language,
+            OriginalTrainerGender = OTGender,
+            OriginalTrainerName = TrainerNames.Span[language],
 
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            HeightScalar = PokeSizeUtil.GetRandomScalar(),
-            WeightScalar = PokeSizeUtil.GetRandomScalar(),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
-
-            HT_Name = tr.OT,
-            HT_Gender = tr.Gender,
+            HandlingTrainerName = tr.OT,
+            HandlingTrainerGender = tr.Gender,
             CurrentHandler = 1,
-            HT_Friendship = pi.BaseFriendship,
+            HandlingTrainerFriendship = pi.BaseFriendship,
+
+            ReceivedDate = date,
+            ReceivedTime = EncounterDate.GetTime(),
         };
 
-        EncounterUtil1.SetEncounterMoves(pk, version, Level);
+        EncounterUtil.SetEncounterMoves(pk, version, Level);
         pk.ResetHeight();
         pk.ResetWeight();
         pk.ResetCP();
@@ -85,13 +89,17 @@ public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEn
         return pk;
     }
 
-    private void SetPINGA(PB7 pk, EncounterCriteria criteria, PersonalInfo7GG pi)
+    private void SetPINGA(PB7 pk, in EncounterCriteria criteria, PersonalInfo7GG pi)
     {
-        pk.PID = Util.Rand32();
-        pk.EncryptionConstant = Util.Rand32();
-        pk.Nature = (int)criteria.GetNature();
+        var rnd = Util.Rand;
+        pk.PID = EncounterUtil.GetRandomPID(pk, rnd, Shiny, criteria.Shiny);
+        pk.EncryptionConstant = rnd.Rand32();
+        pk.Nature = criteria.GetNature();
         pk.Gender = criteria.GetGender(pi);
         pk.RefreshAbility(criteria.GetAbilityFromNumber(Ability));
+
+        pk.HeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
+        pk.WeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
         criteria.SetRandomIVs(pk, IVs);
     }
 
@@ -99,11 +107,11 @@ public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEn
 
     #region Matching
 
-    public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language) => (uint)language < TrainerNames.Length && trainer.SequenceEqual(TrainerNames[language]);
+    public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language) => (uint)language < TrainerNames.Length && trainer.SequenceEqual(TrainerNames.Span[language]);
 
     public bool IsMatchExact(PKM pk, EvoCriteria evo)
     {
-        if (pk.Met_Level != Level)
+        if (pk.MetLevel != Level)
             return false;
         if (IVs.IsSpecified)
         {
@@ -114,7 +122,7 @@ public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEn
             return false;
         if (evo.Form != Form && !FormInfo.IsFormChangeable(Species, Form, pk.Form, Context, pk.Context))
             return false;
-        if (pk.OT_Gender != OTGender)
+        if (pk.OriginalTrainerGender != OTGender)
             return false;
         if (!IsMatchEggLocation(pk))
             return false;
@@ -124,7 +132,7 @@ public sealed record EncounterTrade7b(GameVersion Version) : IEncounterable, IEn
     private bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : EggLocation;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     public EncounterMatchRating GetMatchRating(PKM pk) => EncounterMatchRating.Match;

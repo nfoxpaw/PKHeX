@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.GG"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen7b"/> encounters.
 /// </summary>
 public record struct EncounterPossible7GG(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -175,7 +175,7 @@ public record struct EncounterPossible7GG(EvoCriteria[] Chain, EncounterTypeGrou
         for (; Index < db.Length;)
         {
             var enc = db[Index++];
-            if (!enc.CanBeReceivedByVersion((int)Version))
+            if (!enc.CanBeReceivedByVersion(Version))
                 continue;
             foreach (var evo in Chain)
             {

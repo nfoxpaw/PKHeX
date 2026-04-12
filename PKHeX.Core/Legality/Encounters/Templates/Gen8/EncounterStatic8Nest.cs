@@ -8,18 +8,18 @@ namespace PKHeX.Core;
 /// Generation 8 Nest Encounter (Raid)
 /// </summary>
 public abstract record EncounterStatic8Nest<T>(GameVersion Version)
-    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK8>, IMoveset, ISeedCorrelation64<PKM>,
+    : IEncounterable, IEncounterMatch, IEncounterConvertible<PK8>, IMoveset, ISeedCorrelation64<PKM>, IGenerateSeed64,
         IFlawlessIVCount, IFixedIVSet, IFixedGender, IDynamaxLevelReadOnly, IGigantamaxReadOnly where T : EncounterStatic8Nest<T>
 {
-    public int Generation => 8;
+    public byte Generation => 8;
     public EntityContext Context => EntityContext.Gen8;
 
-    int ILocation.Location => SharedNest;
+    ushort ILocation.Location => SharedNest;
     private const ushort Location = SharedNest;
 
     public bool IsShiny => Shiny == Shiny.Always;
-    public bool EggEncounter => false;
-    int ILocation.EggLocation => 0;
+    public bool IsEgg => false;
+    ushort ILocation.EggLocation => 0;
     public Ball FixedBall => Ball.None;
 
     public ushort Species { get; init; }
@@ -48,40 +48,43 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
 
     public PK8 ConvertToPKM(ITrainerInfo tr) => ConvertToPKM(tr, EncounterCriteria.Unrestricted);
 
+    protected virtual void SetTrainerName(ReadOnlySpan<char> name, PK8 pk) =>
+        pk.SetString(pk.OriginalTrainerTrash, name, name.Length, StringConverterOption.None);
+
     public PK8 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = Info;
         var pk = new PK8
         {
             Species = Species,
             Form = Form,
             CurrentLevel = Level,
-            Met_Location = GetLocation(),
-            Met_Level = Level,
+            MetLocation = GetLocation(),
+            MetLevel = Level,
             MetDate = EncounterDate.GetDateSwitch(),
             Ball = (byte)Ball.Poke,
 
             ID32 = tr.ID32,
-            Version = (byte)version,
-            Language = lang,
-            OT_Gender = tr.Gender,
-            OT_Name = tr.OT,
-            OT_Friendship = pi.BaseFriendship,
+            Version = version,
+            Language = language,
+            OriginalTrainerGender = tr.Gender,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
 
             DynamaxLevel = DynamaxLevel,
             CanGigantamax = CanGigantamax,
         };
+        SetTrainerName(tr.OT, pk);
 
         SetPINGA(pk, criteria, pi);
 
         if (Moves.HasMoves)
             pk.SetMoves(Moves);
         else
-            EncounterUtil1.SetEncounterMoves(pk, version, Level);
+            EncounterUtil.SetEncounterMoves(pk, version, Level);
         pk.ResetPartyStats();
 
         return pk;
@@ -89,7 +92,7 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
 
     protected virtual ushort GetLocation() => Location;
 
-    private void SetPINGA(PK8 pk, EncounterCriteria criteria, PersonalInfo8SWSH pi)
+    protected virtual void SetPINGA(PK8 pk, in EncounterCriteria criteria, PersonalInfo8SWSH pi)
     {
         bool requestShiny = criteria.Shiny.IsShiny();
         bool checkShiny = requestShiny && Shiny != Shiny.Never;
@@ -110,12 +113,18 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
         } while (++ctr < max);
 
         if (ctr == max) // fail
-            while (!TryApply(pk, seed = rand.Next(), iv, param, EncounterCriteria.Unrestricted)) { }
+        {
+            if (!TryApply(pk, seed = rand.Next(), iv, param, criteria.WithoutIVs()))
+            {
+                var tmp = EncounterCriteria.Unrestricted;
+                while (!TryApply(pk, seed = rand.Next(), iv, param, tmp)) { }
+            }
+        }
 
         FinishCorrelation(pk, seed);
-        if ((byte)criteria.Nature != pk.Nature && criteria.Nature.IsMint())
-            pk.StatNature = (byte)criteria.Nature;
     }
+
+    protected GenerateParam8 GetParam() => GetParam(Info);
 
     private GenerateParam8 GetParam(PersonalInfo8SWSH pi)
     {
@@ -133,16 +142,12 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
         if (pk is PK8 d && d.DynamaxLevel < DynamaxLevel)
             return false;
 
-        // Required Ability
-        if (Ability == OnlyHidden && pk.AbilityNumber != 4)
-            return false; // H
-
-        if (Version != GameVersion.SWSH && pk.Version != (int)Version && pk.Met_Location != SharedNest)
+        if (Version != GameVersion.SWSH && pk.Version != Version && pk.MetLocation != SharedNest)
             return false;
 
         if (pk is IRibbonSetMark8 { HasMarkEncounter8: true })
             return false;
-        if (pk.Species == (int)Core.Species.Shedinja && pk is IRibbonSetAffixed { AffixedRibbon: >= (int)RibbonIndex.MarkLunchtime and <= (int)RibbonIndex.MarkSlump })
+        if (pk.Species == (int)Core.Species.Shedinja && pk is IRibbonSetAffixed x && ((RibbonIndex)x.AffixedRibbon).IsEncounterMark8)
             return false;
 
         if (!IsMatchEggLocation(pk))
@@ -164,14 +169,14 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
         return true;
     }
 
-    protected virtual bool IsMatchLocation(PKM pk) => Location == pk.Met_Location;
+    protected virtual bool IsMatchLocation(PKM pk) => Location == pk.MetLocation;
     private static bool IsMatchEggLocation(PKM pk)
     {
         var expect = pk is PB8 ? Locations.Default8bNone : 0;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
-    protected virtual bool IsMatchLevel(PKM pk) => pk.Met_Level == Level;
+    protected virtual bool IsMatchLevel(PKM pk) => pk.MetLevel == Level;
     private bool IsMatchGender(PKM pk) => Gender == FixedGenderUtil.GenderRandom || Gender == pk.Gender;
     private bool IsMatchForm(PKM pk, EvoCriteria evo) => Form == evo.Form || FormInfo.IsFormChangeable(Species, Form, pk.Form, Context, pk.Context);
     private bool IsMatchIVs(PKM pk)
@@ -202,6 +207,8 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
             else if (Ability.IsSingleValue(out int index) && 1 << index != num) // Fixed regular ability
             {
                 if (Ability is OnlyFirst or OnlySecond && !AbilityVerifier.CanAbilityCapsule(8, PersonalTable.SWSH.GetFormEntry(Species, Form)))
+                    return EncounterMatchRating.DeferredErrors;
+                if (Ability is OnlyHidden) // Can't revert to hidden ability even if transferred from HOME and another game with HA reversion.
                     return EncounterMatchRating.DeferredErrors;
             }
         }
@@ -246,17 +253,26 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
     /// <returns>True if the seed is valid for the criteria.</returns>
     public bool Verify(PKM pk, ulong seed, bool forceNoShiny = false)
     {
-        var param = GetParam(PersonalTable.SWSH.GetFormEntry(Species, Form));
+        var param = GetParam();
         Span<int> iv = stackalloc int[6];
         return RaidRNG.Verify(pk, seed, iv, param, forceNoShiny: forceNoShiny);
     }
 
-    protected virtual bool TryApply(PK8 pk, ulong seed, Span<int> iv, GenerateParam8 param, EncounterCriteria criteria)
+    public virtual void GenerateSeed64(PKM pk, ulong seed)
+    {
+        var criteria = EncounterCriteria.Unrestricted;
+        var pk8 = (PK8)pk;
+        var param = GetParam();
+        Span<int> iv = stackalloc int[6];
+        RaidRNG.TryApply(pk8, seed, iv, param, criteria);
+    }
+
+    protected virtual bool TryApply(PK8 pk, ulong seed, Span<int> iv, in GenerateParam8 param, in EncounterCriteria criteria)
     {
         return RaidRNG.TryApply(pk, seed, iv, param, criteria);
     }
 
-    private static byte RemapGenderToParam(byte gender, PersonalInfo8SWSH pi) => gender switch
+    protected static byte RemapGenderToParam(byte gender, PersonalInfo8SWSH pi) => gender switch
     {
         0 => PersonalInfo.RatioMagicMale,
         1 => PersonalInfo.RatioMagicFemale,
@@ -269,10 +285,14 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
         if (pk.IsShiny)
             return true;
 
-        return TryGetSeed(pk, out _);
+        var pidiv = TryGetSeed(pk, out _);
+        if (pidiv == SeedCorrelationResult.Success)
+            return true;
+
+        return false;
     }
 
-    public bool TryGetSeed(PKM pk, out ulong seed)
+    public SeedCorrelationResult TryGetSeed(PKM pk, out ulong seed)
     {
         var ec = pk.EncryptionConstant;
         var pid = pk.PID;
@@ -280,16 +300,18 @@ public abstract record EncounterStatic8Nest<T>(GameVersion Version)
         foreach (var s in seeds)
         {
             if (IsMatchSeed(pk, seed = s))
-                return true;
+                return SeedCorrelationResult.Success;
         }
         seeds = new XoroMachineSkip(ec, pid ^ 0x1000_0000);
         foreach (var s in seeds)
         {
             if (IsMatchSeed(pk, seed = s))
-                return true;
+                return SeedCorrelationResult.Success;
         }
         seed = 0;
-        return false;
+        if (pk.IsShiny)
+            return SeedCorrelationResult.Ignore;
+        return SeedCorrelationResult.Invalid;
     }
 
     protected virtual bool IsMatchSeed(PKM pk, ulong seed) => Verify(pk, seed);

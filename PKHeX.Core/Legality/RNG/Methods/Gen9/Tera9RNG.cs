@@ -7,6 +7,9 @@ namespace PKHeX.Core;
 /// </summary>
 public static class Tera9RNG
 {
+    /// <summary>
+    /// Type max (exclusive) to use when picking a random a Tera Type.
+    /// </summary>
     private const uint TeraTypeCount = 18;
 
     /// <summary>
@@ -67,29 +70,35 @@ public static class Tera9RNG
             return type;
 
         var rand = new Xoroshiro128Plus(seed);
-        if (gem == GemType.Default)
-        {
-            var pivot = rand.NextInt(2);
-            return GetTeraTypeFromPersonal(species, form, pivot);
-        }
         if (gem == GemType.Random)
-        {
             return (byte)rand.NextInt(TeraTypeCount);
-        }
-        throw new ArgumentOutOfRangeException(nameof(gem), gem, null);
+        if (gem != GemType.Default)
+            throw new ArgumentOutOfRangeException(nameof(gem), gem, null);
+        var pivot = rand.NextInt(2);
+        return GetTeraTypeFromPersonal(species, form, pivot);
     }
 
     /// <summary>
     /// Checks if the original Tera Type matches either of the Personal Info types.
     /// </summary>
-    private static bool IsMatchType(IPersonalType pi, in byte original) => original == pi.Type1 || original == pi.Type2;
+    private static bool IsMatchType<T>(T pi, in byte original) where T : IPersonalType => original == pi.Type1 || original == pi.Type2;
 
+    /// <summary>
+    /// Checks if the original Tera Type matches the Personal Info type for the specified form.
+    /// </summary>
+    /// <param name="species">Egg Species</param>
+    /// <param name="form">Egg Form</param>
+    /// <param name="original">Original Tera Type from the Entity</param>
+    /// <returns>True if the Tera Type matches the expected Personal Info type</returns>
+    /// <remarks>
+    /// Special consideration is required as some eggs can change forms that have different Personal Info types.
+    /// </remarks>
     public static bool IsMatchTeraTypePersonalEgg(in ushort species, in byte form, in byte original) =>
-        FormInfo.IsFormChangeEgg(species)
+        FormInfo.IsFormChangeEggTypes(species)
             ? IsMatchTeraTypePersonalAnyForm(species, original)
             : IsMatchTeraTypePersonal(species, form, original);
 
-    /// <inheritdoc cref="IsMatchType"/>
+    /// <inheritdoc cref="IsMatchType{T}"/>
     public static bool IsMatchTeraTypePersonal(in ushort species, in byte form, in byte original) => IsMatchType(PersonalTable.SV[species, form], original);
 
     /// <summary>
@@ -227,14 +236,14 @@ public static class Tera9RNG
         // Thanks to a silly <= check, the range check edge is inclusive (unlike the slot determination).
         // Each rate has its low bound used by the prior's rate check.
         // This results in:
-        // - the first rate check having a total range of one more than the intended range.
-        // - the last rate check having a total range of one less than the intended range.
-        1 => rand <= 80,                                             // [  0, 80], [ 0, 30], or [ 0, 20]
-        2 => rand is (> 80) or (> 30 and <= 70) or (> 20 and <= 40), // (80, 100], (30, 70], or (20, 40]
-        3 => true, // all progress ranges overlap!                   // (70, 100], (40, 70], or [ 0, 40]
-        4 => rand is (> 70) or (> 40 and <= 75) or (> 30 and <= 70), // (70, 100], (40, 75], or (30, 70]
-        5 => rand > 70,                                              // (70, 100]
-        _ => true,                                                   // forced star count
+        // - the 1st rate check has a total range of one more than the intended range.
+        // - the last rate check has a total range of one less than the intended range.
+        1 => rand <= 80,                      // [  0, 80], [ 0, 30], or [ 0, 20]
+        2 => rand is (<=70 and >20) or (>80), // (80, 100], (30, 70], or (20, 40]
+        3 => true, // all ranges overlap!     // (70, 100], (40, 70], or [ 0, 40]
+        4 => rand > 30,                       // (70, 100], (40, 75], or (30, 70]
+        5 => rand > 70,                       // (70, 100]
+        _ => true,                            // forced star count
     };
 
     /// <summary>

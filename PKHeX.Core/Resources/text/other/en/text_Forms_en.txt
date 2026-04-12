@@ -1133,3 +1133,10 @@ Hearthflame
 Cornerstone
 Artisan
 Masterpiece
+Terastal
+Stellar
+Medium
+Small
+Large
+Jumbo
+Mega Z

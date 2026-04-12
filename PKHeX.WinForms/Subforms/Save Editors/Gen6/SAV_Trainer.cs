@@ -11,7 +11,7 @@ public partial class SAV_Trainer : Form
     private readonly SaveFile Origin;
     private readonly SAV6 SAV;
 
-    public SAV_Trainer(SaveFile sav)
+    public SAV_Trainer(SAV6 sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
@@ -23,7 +23,7 @@ public partial class SAV_Trainer : Form
                 TB_TRNick.Font = TB_OTName.Font;
         }
 
-        B_MaxCash.Click += (sender, e) => MT_Money.Text = "9,999,999";
+        B_MaxCash.Click += (_, _) => MT_Money.Text = "9,999,999";
 
         CB_Gender.Items.Clear();
         CB_Gender.Items.AddRange(Main.GenderSymbols.Take(2).ToArray()); // m/f depending on unicode selection
@@ -31,15 +31,15 @@ public partial class SAV_Trainer : Form
         TrainerStats.LoadRecords(SAV, RecordLists.RecordList_6);
         TrainerStats.GetToolTipText = UpdateTip;
 
-        MaisonRecords = new[]
-        {
+        MaisonRecords =
+        [
             TB_MCSN,TB_MCSS,TB_MBSN,TB_MBSS,
             TB_MCDN,TB_MCDS,TB_MBDN,TB_MBDS,
             TB_MCTN,TB_MCTS,TB_MBTN,TB_MBTS,
             TB_MCRN,TB_MCRS,TB_MBRN,TB_MBRS,
             TB_MCMN,TB_MCMS,TB_MBMN,TB_MBMS,
-        };
-        cba = new[] { CHK_Badge1, CHK_Badge2, CHK_Badge3, CHK_Badge4, CHK_Badge5, CHK_Badge6, CHK_Badge7, CHK_Badge8 };
+        ];
+        cba = [CHK_Badge1, CHK_Badge2, CHK_Badge3, CHK_Badge4, CHK_Badge5, CHK_Badge6, CHK_Badge7, CHK_Badge8];
 
         L_MultiplayerSprite.Enabled = CB_MultiplayerSprite.Enabled =
             L_MultiplayerSprite.Visible = CB_MultiplayerSprite.Visible = PB_Sprite.Visible = SAV is not SAV6AODemo;
@@ -72,22 +72,22 @@ public partial class SAV_Trainer : Form
 
     private void GetComboBoxes()
     {
+        var sources = GameInfo.Sources;
         CB_3DSReg.InitializeBinding();
-        CB_3DSReg.DataSource = GameInfo.Regions;
+        CB_3DSReg.DataSource = new BindingSource(sources.Regions, string.Empty);
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
 
         CB_Country.InitializeBinding();
         CB_Region.InitializeBinding();
         Main.SetCountrySubRegion(CB_Country, "countries");
 
-        var names = Enum.GetNames(typeof(TrainerSprite6));
-        var values = (int[])Enum.GetValues(typeof(TrainerSprite6));
-        var data = names.Zip(values, (a, b) => new ComboItem(a, b))
-            .ToList();
-        if (SAV is not SAV6AO)
-            data.RemoveAll(z => z.Value > 36);
-
+        var names = WinFormsTranslator.GetEnumTranslation<TrainerSprite6>(Main.CurrentLanguage);
+        var values = Enum.GetValues<TrainerSprite6>();
+        var max = SAV is not SAV6AO ? (int)TrainerSprite6.Trevor : names.Length;
+        var data = new ComboItem[max];
+        for (int i = 0; i < max; i++)
+            data[i] = new ComboItem(names[i], (int)values[i]);
         CB_MultiplayerSprite.InitializeBinding();
         CB_MultiplayerSprite.DataSource = data;
 
@@ -105,7 +105,7 @@ public partial class SAV_Trainer : Form
         // Get Data
         string OT_NAME = SAV.OT;
 
-        CB_Game.SelectedIndex = SAV.Game - 0x18;
+        CB_Game.SelectedIndex = (int)(SAV.Version - 0x18);
         CB_Gender.SelectedIndex = SAV.Gender;
 
         // Display Data
@@ -166,7 +166,7 @@ public partial class SAV_Trainer : Form
         {
             var xystat = (MyStatus6XY)xy.Status;
             PG_CurrentAppearance.SelectedObject = xystat.Fashion;
-            TB_TRNick.Text = xystat.OT_Nick;
+            TB_TRNick.Text = xystat.Nickname;
         }
 
         CB_Vivillon.SelectedIndex = SAV.Vivillon;
@@ -191,8 +191,9 @@ public partial class SAV_Trainer : Form
 
     private void Save()
     {
-        SAV.Game = (byte)(CB_Game.SelectedIndex + 0x18);
+        SAV.Version = (GameVersion)(CB_Game.SelectedIndex + 0x18);
         SAV.Gender = (byte)CB_Gender.SelectedIndex;
+        SAV.Overworld.ResetPlayerModel();
 
         SAV.TID16 = (ushort)Util.ToUInt32(MT_TID.Text);
         SAV.SID16 = (ushort)Util.ToUInt32(MT_SID.Text);
@@ -202,7 +203,8 @@ public partial class SAV_Trainer : Form
         SAV.ConsoleRegion = (byte)WinFormsUtil.GetIndex(CB_3DSReg);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
 
-        SAV.OT = TB_OTName.Text;
+        if (SAV.OT != TB_OTName.Text) // only modify if changed (preserve trash bytes?)
+            SAV.OT = TB_OTName.Text;
 
         var status = SAV.Status;
         status.Saying1 = TB_Saying1.Text;
@@ -249,14 +251,14 @@ public partial class SAV_Trainer : Form
 
         // Sprite
         if (SAV is IMultiplayerSprite ms)
-            ms.MultiplayerSpriteID = Convert.ToByte(CB_MultiplayerSprite.SelectedValue);
+            ms.MultiplayerSpriteID = (byte)WinFormsUtil.GetIndex(CB_MultiplayerSprite);
 
         // Appearance
         if (SAV is SAV6XY xy)
         {
             var xystat = (MyStatus6XY)xy.Status;
-            xystat.Fashion = (TrainerFashion6)PG_CurrentAppearance.SelectedObject;
-            xystat.OT_Nick = TB_TRNick.Text;
+            xystat.Fashion = (TrainerFashion6)PG_CurrentAppearance.SelectedObject!;
+            xystat.Nickname = TB_TRNick.Text;
         }
 
         // Vivillon
@@ -274,14 +276,11 @@ public partial class SAV_Trainer : Form
 
     private void ClickOT(object sender, MouseEventArgs e)
     {
-        TextBox tb = sender as TextBox ?? TB_OTName;
         // Special Character Form
         if (ModifierKeys != Keys.Control)
             return;
 
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        TrashEditor.Show(TB_OTName, SAV, SAV.Status.OriginalTrainerTrash);
     }
 
     private void ShowTSV(object sender, EventArgs e)
@@ -308,8 +307,10 @@ public partial class SAV_Trainer : Form
     private void Change255(object sender, EventArgs e)
     {
         MaskedTextBox box = (MaskedTextBox)sender;
-        if (box.Text.Length == 0) box.Text = "0";
-        if (Util.ToInt32(box.Text) > 255) box.Text = "255";
+        if (box.Text.Length == 0)
+            box.Text = "0";
+        else if (Util.ToInt32(box.Text) > 255)
+            box.Text = "255";
     }
 
     private void ChangeFFFF(object sender, EventArgs e)
@@ -326,14 +327,16 @@ public partial class SAV_Trainer : Form
         if (SAV is SAV6XY xy)
         {
             xy.Blocks.Fashion.UnlockAllAccessories();
-            System.Media.SystemSounds.Asterisk.Play();
+            WinFormsUtil.Asterisk();
         }
     }
 
     private void UpdateCountry(object sender, EventArgs e)
     {
-        int index;
-        if (sender is ComboBox c && (index = WinFormsUtil.GetIndex(c)) > 0)
+        if (sender is not ComboBox c)
+            return;
+        int index = WinFormsUtil.GetIndex(c);
+        if (index > 0)
             Main.SetCountrySubRegion(CB_Region, $"sr_{index:000}");
     }
 

@@ -4,23 +4,23 @@ using static PKHeX.Core.Species;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Encounter Slot representing data transferred to <see cref="GameVersion.Gen8"/> (HOME).
+/// Encounter Slot representing data transferred to HOME.
 /// <inheritdoc cref="PogoSlotExtensions" />
 /// </summary>
 public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species, byte Form, byte LevelMin, byte LevelMax, Shiny Shiny, Gender Gender, PogoType Type, PogoImportFormat OriginFormat)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<PKM>, IPogoSlot, IFixedOTFriendship, IEncounterServerDate
 {
-    public int Generation => 8;
+    public byte Generation => 8;
     public bool IsDateRestricted => true;
     public bool IsShiny => Shiny.IsShiny();
     public Ball FixedBall => Type.GetValidBall();
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public AbilityPermission Ability => AbilityPermission.Any12;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
     public GameVersion Version => GameVersion.GO;
-    public int Location => Locations.GO8;
+    public ushort Location => Locations.GO8;
 
-    public string Name => $"Wild Encounter ({Version})";
+    public string Name => $"GO Encounter ({Version})";
     public string LongName
     {
         get
@@ -58,7 +58,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
         if (currentSpecies == (int)Shedinja && currentSpecies != Species)
             return ball == Ball.Poke;
         if (ball == Ball.Master)
-            return Type.IsMasterBallUsable() && pk.MetDate >= new DateOnly(2023, 5, 21);
+            return Type.IsMasterBallUsable && pk.MetDate >= new DateOnly(2023, 5, 21);
         return Type.IsBallValid(ball);
     }
 
@@ -113,38 +113,39 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
     public PKM ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
         var pk = GetBlank();
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
+        int language = (int)Language.GetSafeLanguage789((LanguageID)tr.Language);
+        var rnd = Util.Rand;
         {
-            pk.Language = lang;
-            pk.PID = Util.Rand32();
-            pk.EncryptionConstant = Util.Rand32();
+            pk.Language = language;
+            pk.PID = rnd.Rand32();
+            pk.EncryptionConstant = rnd.Rand32();
             pk.Species = Species;
             pk.Form = Form;
             pk.CurrentLevel = LevelMin;
-            pk.OT_Friendship = OT_Friendship;
-            pk.Met_Location = Location;
-            pk.Met_Level = LevelMin;
-            pk.Version = (byte)GameVersion.GO;
+            pk.OriginalTrainerFriendship = OriginalTrainerFriendship;
+            pk.MetLocation = Location;
+            pk.MetLevel = LevelMin;
+            pk.Version = GameVersion.GO;
             pk.Ball = (byte)GetRequiredBall(Ball.Poke);
             pk.MetDate = this.GetRandomValidDate();
 
-            pk.OT_Name = tr.OT;
+            pk.OriginalTrainerName = tr.OT;
             pk.ID32 = tr.ID32;
-            pk.OT_Gender = tr.Gender;
-            pk.HT_Name = "PKHeX";
+            pk.OriginalTrainerGender = tr.Gender;
+            pk.HandlingTrainerName = TrainerName.ProgramINT;
             pk.CurrentHandler = 1;
             if (pk is IHandlerLanguage l)
-                l.HT_Language = 2;
+                l.HandlingTrainerLanguage = 2;
         }
         SetPINGA(pk, criteria);
-        EncounterUtil1.SetEncounterMoves(pk, Version, LevelMin);
-        pk.Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation);
+        EncounterUtil.SetEncounterMoves(pk, Version, LevelMin);
+        pk.Nickname = SpeciesName.GetSpeciesNameImportHOME(Species, language, Generation);
         SetEncounterMoves(pk, LevelMin);
 
         if (pk is IScaledSize s2)
         {
-            s2.HeightScalar = PokeSizeUtil.GetRandomScalar();
-            s2.WeightScalar = PokeSizeUtil.GetRandomScalar();
+            s2.HeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
+            s2.WeightScalar = PokeSizeUtil.GetRandomScalar(rnd);
             if (pk is IScaledSize3 s3)
                 s3.Scale = s2.HeightScalar;
         }
@@ -157,20 +158,19 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
         {
             var pi = pk9.PersonalInfo;
             pk9.TeraTypeOriginal = pk9.TeraTypeOverride = TeraTypeUtil.GetTeraTypeImport(pi.Type1, pi.Type2);
-            pk9.Obedience_Level = (byte)pk9.Met_Level;
+            pk9.ObedienceLevel = pk9.MetLevel;
         }
         pk.ResetPartyStats();
         return pk;
     }
 
-    private void SetPINGA(PKM pk, EncounterCriteria criteria)
+    private void SetPINGA(PKM pk, in EncounterCriteria criteria)
     {
         var pi = GetPersonal();
         if (OriginFormat is PogoImportFormat.PK7)
             pk.EXP = Experience.GetEXP(LevelMin, pi.EXPGrowth);
-        var g = Gender == Gender.Random ? -1 : (int)Gender;
-        int gender = criteria.GetGender(g, pi);
-        int nature = (int)criteria.GetNature();
+        var gender = criteria.GetGender(Gender, pi);
+        var nature = criteria.GetNature();
         var ability = criteria.GetAbilityFromNumber(Ability);
 
         pk.Nature = pk.StatNature = nature;
@@ -180,7 +180,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
         if ((uint)ability < pi.AbilityCount)
             pk.Ability = pi.GetAbilityAtIndex(ability);
 
-        criteria.SetRandomIVsGO(pk, Type.GetMinIV());
+        criteria.SetRandomIVsGO(pk, Type.MinimumIV);
 
         switch (Shiny)
         {
@@ -196,14 +196,14 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
         }
     }
 
-    private void SetEncounterMoves(PKM pk, int level)
+    private void SetEncounterMoves(PKM pk, byte level)
     {
         Span<ushort> moves = stackalloc ushort[4];
         GetInitialMoves(level, moves);
         pk.SetMoves(moves);
     }
 
-    public void GetInitialMoves(int level, Span<ushort> moves)
+    public void GetInitialMoves(byte level, Span<ushort> moves)
     {
         var source = GameData.GetLearnSource(OriginGroup);
         source.SetEncounterMoves(Species, Form, level, moves);
@@ -214,7 +214,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
 
     public bool IsMatchExact(PKM pk, EvoCriteria evo)
     {
-        if (!this.IsLevelWithinRange(pk.Met_Level))
+        if (!this.IsLevelWithinRange(pk.MetLevel))
             return false;
         if (!IsBallValid((Ball)pk.Ball, pk.Species, pk))
             return false;
@@ -229,12 +229,36 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
     {
         if (IsMatchPartial(pk))
             return EncounterMatchRating.PartialMatch;
+        if (Species is (int)Farfetchd && IsReallySirfetchd(pk))
+            return EncounterMatchRating.DeferredErrors;
+        if (pk is ITeraType ro && IsTeraTypeMismatch(ro.TeraTypeOriginal, PersonalTable.SV[Species, Form]))
+            return EncounterMatchRating.DeferredErrors;
         if (!this.GetIVsValid(pk))
             return EncounterMatchRating.Deferred;
         return EncounterMatchRating.Match;
     }
 
-    public byte OT_Friendship => Species switch
+    private static bool IsTeraTypeMismatch(MoveType original, PersonalInfo9SV pi) => original != TeraTypeUtil.GetTeraTypeImport(pi.Type1, pi.Type2);
+
+    /// <summary>
+    /// Checks if a Farfetch'd was originally a Sirfetch'd.
+    /// </summary>
+    /// <remarks>Only basis we can check with is if it has the bad HOME apostrophe.</remarks>
+    private static bool IsReallySirfetchd(PKM pk)
+    {
+        if (pk.Species != (int)Sirfetchd)
+            return false;
+
+        // Check for the "wrong" apostrophe. If it matches the species name, then it was originally Farfetch'd.
+        if (pk.IsNicknamed || !SpeciesName.IsApostropheFarfetchdLanguage(pk.Language))
+            return false; // can't tell if it was originally Farfetch'd
+
+        Span<char> name = stackalloc char[pk.TrashCharCountNickname];
+        int length = pk.LoadString(pk.NicknameTrash, name);
+        return name[..length] is "Sirfetch'd"; // only way to get the bad apostrophe is to originate in HOME with it.
+    }
+
+    public byte OriginalTrainerFriendship => Species switch
     {
         (int)Timburr  when Form == 0 => 70,
         (int)Stunfisk when Form == 0 => 70,
@@ -244,7 +268,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
 
     private byte GetHOMEFriendship()
     {
-        var fs = (byte)GetPersonal().BaseFriendship;
+        var fs = GetPersonal().BaseFriendship;
         if (fs == 70)
             return 50;
         return fs;
@@ -258,7 +282,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
             return true;
 
         // Eevee & Glaceon have different base friendships. Make sure if it is invalid that we yield the other encounter before.
-        if (pk.OT_Friendship != OT_Friendship)
+        if (pk.OriginalTrainerFriendship != OriginalTrainerFriendship)
             return true;
 
         return IsFormArgIncorrect(pk);
@@ -266,7 +290,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
 
     public bool IsWithinDistributionWindow(PKM pk)
     {
-        var date = new DateOnly(pk.Met_Year + 2000, pk.Met_Month, pk.Met_Day);
+        var date = new DateOnly(pk.MetYear + 2000, pk.MetMonth, pk.MetDay);
         return IsWithinDistributionWindow(date);
     }
 
@@ -276,7 +300,7 @@ public sealed record EncounterSlot8GO(int StartDate, int EndDate, ushort Species
         return this.IsWithinStartEnd(stamp);
     }
 
-    private bool IsFormArgIncorrect(ISpeciesForm pk) => Species switch
+    private bool IsFormArgIncorrect<T>(T pk) where T : ISpeciesForm => Species switch
     {
         // Evolved without Form Argument changing from default
         (int)Yamask     when pk.Species != Species && Form == 1 => pk is IFormArgument { FormArgument: 0 },

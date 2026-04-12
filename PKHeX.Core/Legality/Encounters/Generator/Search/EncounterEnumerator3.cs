@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.Gen3"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen3"/>.
 /// </summary>
 public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -15,7 +15,7 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
     private EncounterMatchRating Rating = EncounterMatchRating.MaxNotMatch;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     private bool mustBeSlot;
     private bool hasOriginalLocation;
 
@@ -33,6 +33,8 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
         EventColoR,
         EventColoS,
         Event,
+        EventPCNY,
+        EventPCJP,
 
         Bred,
         BredSplit,
@@ -50,6 +52,7 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
         SlotR,
         SlotS,
         SlotE,
+        SwarmRSE,
         SlotFR,
         SlotLG,
         SlotEnd,
@@ -90,6 +93,17 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
                 Index = 0; State = YieldState.Event; goto case YieldState.Event;
             case YieldState.Event:
                 if (TryGetNext(EncountersWC3.Encounter_WC3))
+                    return true;
+                Index = 0;
+                if (Entity.Language == (int)LanguageID.English) { State = YieldState.EventPCNY; goto case YieldState.EventPCNY; }
+                if (Entity.Language == (int)LanguageID.Japanese) { State = YieldState.EventPCJP; goto case YieldState.EventPCJP; }
+                State = YieldState.TradeStart; goto case YieldState.TradeStart;
+            case YieldState.EventPCNY:
+                if (TryGetNext(EncountersWC3.PCNY))
+                    return true;
+                Index = 0; goto case YieldState.TradeStart;
+            case YieldState.EventPCJP:
+                if (TryGetNext(EncountersWC3.PCJP))
                     return true;
                 Index = 0; goto case YieldState.TradeStart;
 
@@ -142,18 +156,24 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
                 if (Version == GameVersion.LG)
                 { State = YieldState.SlotLG; goto case YieldState.SlotLG; }
                 throw new ArgumentOutOfRangeException(nameof(Version));
+
             case YieldState.SlotR:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsR))
                     return true;
-                Index = 0; goto case YieldState.SlotEnd;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
             case YieldState.SlotS:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsS))
                     return true;
-                Index = 0; goto case YieldState.SlotEnd;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
             case YieldState.SlotE:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsE))
                     return true;
+                Index = 0; State = YieldState.SwarmRSE; goto case YieldState.SwarmRSE;
+            case YieldState.SwarmRSE:
+                if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3RSE.SlotsSwarmRSE))
+                    return true;
                 Index = 0; goto case YieldState.SlotEnd;
+
             case YieldState.SlotFR:
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3FRLG.SlotsFR))
                     return true;
@@ -162,6 +182,7 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
                 if (TryGetNext<EncounterArea3, EncounterSlot3>(Encounters3FRLG.SlotsLG))
                     return true;
                 Index = 0; goto case YieldState.SlotEnd;
+
             case YieldState.SlotEnd:
                 if (mustBeSlot)
                     goto case YieldState.StaticStart; // be generous with bad balls
@@ -221,13 +242,13 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
                 return SetCurrent(egg);
             case YieldState.BredSplit:
                 State = YieldState.Fallback;
-                if (!EncounterGenerator3.TryGetSplit((EncounterEgg)Current.Encounter, Chain, out egg))
+                if (!EncounterGenerator3.TryGetSplit((EncounterEgg3)Current.Encounter, Chain, out egg))
                     goto case YieldState.Fallback;
                 return SetCurrent(egg);
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -236,7 +257,7 @@ public record struct EncounterEnumerator3(PKM Entity, EvoCriteria[] Chain, GameV
 
     private void InitializeWildLocationInfo()
     {
-        met = Entity.Met_Location;
+        met = Entity.MetLocation;
         mustBeSlot = Entity.Ball is (int)Ball.Safari; // never static
         hasOriginalLocation = Entity.Format == 3;
     }

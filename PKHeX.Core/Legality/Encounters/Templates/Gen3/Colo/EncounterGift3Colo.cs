@@ -1,48 +1,48 @@
 using System;
+using static PKHeX.Core.RandomCorrelationRating;
 
 namespace PKHeX.Core;
 
 /// <summary>
 /// Generation 3 Static Encounter
 /// </summary>
-public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEncounterConvertible<CK3>, IRandomCorrelation, IFixedTrainer, IMoveset
+public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEncounterConvertible<CK3>,
+    IRandomCorrelation, IFixedTrainer, IMoveset, ITrainerID16ReadOnly
 {
-    public int Generation => 3;
+    public byte Generation => 3;
     public EntityContext Context => EntityContext.Gen3;
     public GameVersion Version { get; }
-    int ILocation.EggLocation => 0;
-    int ILocation.Location => Location;
+    ushort ILocation.EggLocation => 0;
+    ushort ILocation.Location => Location;
     public bool IsShiny => false;
     public Shiny Shiny => Shiny.Never;
     public byte Form => 0;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public AbilityPermission Ability => AbilityPermission.Any12;
     public Ball FixedBall => Ball.Poke;
     public bool IsFixedTrainer => true;
     public bool IsJapaneseBonusDisk => Version == GameVersion.R;
 
-    private readonly string[] TrainerNames;
+    private readonly ReadOnlyMemory<string> TrainerNames;
     public ushort Species { get; }
     public byte Level { get; }
     public required byte Location { get; init; }
     public Moveset Moves { get; init; }
     public required ushort TID16 { get; init; }
-    public required byte OT_Gender { get; init; }
+    public required byte OriginalTrainerGender { get; init; }
 
-    public EncounterGift3Colo(ushort species, byte level, string[] trainers, GameVersion game)
+    public EncounterGift3Colo(ushort species, byte level, ReadOnlyMemory<string> trainers, GameVersion version)
     {
         Species = species;
         Level = level;
         TrainerNames = trainers;
-        Version = game;
+        Version = version;
     }
 
     public string Name => "Gift Encounter";
     public string LongName => Name;
     public byte LevelMin => Level;
     public byte LevelMax => Level;
-
-    public bool IsColoStarter => Species is (ushort)Core.Species.Espeon or (ushort)Core.Species.Umbreon;
 
     #region Generating
     PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria) => ConvertToPKM(tr, criteria);
@@ -57,16 +57,16 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
         {
             Species = Species,
             CurrentLevel = Level,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Met_Location = Location,
-            Met_Level = Level,
-            Version = (byte)Version,
+            MetLocation = Location,
+            MetLevel = Level,
+            Version = Version,
             Ball = (byte)Ball.Poke,
 
             Language = lang,
-            OT_Name = TrainerNames[lang],
-            OT_Gender = OT_Gender,
+            OriginalTrainerName = TrainerNames.Span[lang],
+            OriginalTrainerGender = OriginalTrainerGender,
             ID32 = TID16,
             Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
         };
@@ -75,7 +75,7 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
         if (Moves.HasMoves)
             pk.SetMoves(Moves);
         else
-            EncounterUtil1.SetEncounterMoves(pk, Version, Level);
+            EncounterUtil.SetEncounterMoves(pk, Version, Level);
 
         pk.ResetPartyStats();
         return pk;
@@ -85,24 +85,23 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
     {
         if (IsJapaneseBonusDisk)
             return 1; // Japanese
-        return (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
+        return (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
     }
 
-    private void SetPINGA(CK3 pk, EncounterCriteria criteria, PersonalInfo3 pi)
+    private static void SetPINGA(CK3 pk, in EncounterCriteria criteria, PersonalInfo3 pi)
     {
-        int gender = criteria.GetGender(pi);
-        int nature = (int)criteria.GetNature();
-        var ability = criteria.GetAbilityFromNumber(Ability);
-        do
-        {
-            PIDGenerator.SetRandomWildPID4(pk, nature, ability, gender, PIDType.CXD);
-        } while (Shiny == Shiny.Never && pk.IsShiny);
+        var tmp = criteria with { Shiny = Shiny.Never }; // ensure no bad inputs
+        if (criteria.IsSpecifiedIVsAll() && MethodCXD.SetFromIVs(pk, tmp, pi, noShiny: true))
+            return;
+        MethodCXD.SetRandom(pk, tmp, pi, noShiny: true, Util.Rand32());
     }
     #endregion
 
     #region Matching
     public bool IsMatchExact(PKM pk, EvoCriteria evo)
     {
+        if (pk.Version != Version)
+            return false;
         if (!IsMatchEggLocation(pk))
             return false;
         if (!IsMatchLocation(pk))
@@ -127,14 +126,14 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
             return true;
 
         var expect = pk is PB8 ? Locations.Default8bNone : 0;
-        return pk.Egg_Location == expect;
+        return pk.EggLocation == expect;
     }
 
     private bool IsMatchLevel(PKM pk, EvoCriteria evo)
     {
         if (pk.Format != 3) // Met Level lost on PK3=>PK4
             return evo.LevelMax >= Level;
-        return pk.Met_Level == Level;
+        return pk.MetLevel == Level;
     }
 
     private bool IsMatchLocation(PKM pk)
@@ -142,7 +141,7 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
         if (pk.Format != 3)
             return true; // transfer location verified later
 
-        var met = pk.Met_Location;
+        var met = pk.MetLocation;
         return Location == met;
     }
 
@@ -156,12 +155,7 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
     }
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk)
-    {
-        if (IsColoStarter)
-            return val is PIDType.CXD_ColoStarter;
-        return val is PIDType.CXD;
-    }
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk) => type is PIDType.CXD or PIDType.CXDAnti ? Match : Mismatch;
 
     public PIDType GetSuggestedCorrelation() => PIDType.CXD;
 
@@ -170,14 +164,19 @@ public sealed record EncounterGift3Colo : IEncounterable, IEncounterMatch, IEnco
         if ((uint)language >= TrainerNames.Length)
             return false;
 
-        var max = language == 1 ? 5 : 7;
-        var expect = TrainerNames[language].AsSpan();
-
+        var expect = TrainerNames.Span[language].AsSpan();
         if (pk is CK3 && expect.SequenceEqual(trainer))
             return true; // not yet transferred to mainline Gen3
 
+        var max = language == 1 ? 5 : 7;
         if (expect.Length > max)
             expect = expect[..max];
-        return expect.SequenceEqual(trainer);
+        if (pk.Context == EntityContext.Gen3)
+            return trainer.SequenceEqual(expect);
+        if (IsSpanishDuking(language)) // Gen4+
+            return trainer is Encounters3Colo.TrainerNameDukingSpanish4;
+        return trainer.SequenceEqual(expect);
     }
+
+    private bool IsSpanishDuking(int language) => language is (int)LanguageID.Spanish && Species is (int)Core.Species.Plusle;
 }

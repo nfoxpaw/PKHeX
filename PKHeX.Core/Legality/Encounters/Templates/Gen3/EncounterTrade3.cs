@@ -5,22 +5,23 @@ namespace PKHeX.Core;
 /// <summary>
 /// Generation 3 Trade Encounter
 /// </summary>
-public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTrainer, IFixedNickname, IFixedGender, IFixedNature, IEncounterConvertible<PK3>, IContestStatsReadOnly
+public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTrainer, IFixedNickname,
+    IFixedGender, IFixedNature, IFixedIVSet, IEncounterConvertible<PK3>, IContestStatsReadOnly, ITrainerID32ReadOnly
 {
-    public int Generation => 3;
+    public byte Generation => 3;
     public EntityContext Context => EntityContext.Gen3;
-    public int Location => Locations.LinkTrade3NPC;
+    public ushort Location => Locations.LinkTrade3NPC;
     public Shiny Shiny => Shiny.FixedValue;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.Poke;
     public bool IsShiny => false;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
     public bool IsFixedTrainer => true;
     public bool IsFixedNickname => true;
     public Nature Nature => (Nature)(PID % 25);
 
-    private string[] TrainerNames { get; }
-    private string[] Nicknames { get; }
+    private readonly ReadOnlyMemory<string> TrainerNames;
+    private readonly ReadOnlyMemory<string> Nicknames;
 
     public required AbilityPermission Ability { get; init; }
     public required byte Gender { get; init; }
@@ -44,32 +45,33 @@ public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTr
 
     public required ushort TID16 { get; init; }
     public ushort SID16 { get; init; }
+    public uint ID32 => TID16 | (uint)(SID16 << 16);
 
-    public byte CNT_Cool   { get; private init; }
-    public byte CNT_Beauty { get; private init; }
-    public byte CNT_Cute   { get; private init; }
-    public byte CNT_Smart  { get; private init; }
-    public byte CNT_Tough  { get; private init; }
-    public byte CNT_Sheen  { get; private init; }
+    public byte ContestCool   { get; private init; }
+    public byte ContestBeauty { get; private init; }
+    public byte ContestCute   { get; private init; }
+    public byte ContestSmart  { get; private init; }
+    public byte ContestTough  { get; private init; }
+    public byte ContestSheen  { get; private init; }
 
     public required ReadOnlySpan<byte> Contest
     {
         init
         {
-            CNT_Cool   = value[0];
-            CNT_Beauty = value[1];
-            CNT_Cute   = value[2];
-            CNT_Smart  = value[3];
-            CNT_Tough  = value[4];
-            CNT_Sheen  = value[5];
+            ContestCool   = value[0];
+            ContestBeauty = value[1];
+            ContestCute   = value[2];
+            ContestSmart  = value[3];
+            ContestTough  = value[4];
+            ContestSheen  = value[5];
         }
     }
 
-    public EncounterTrade3(ReadOnlySpan<string[]> names, byte index, GameVersion game, uint pid, ushort species, byte level)
+    public EncounterTrade3(ReadOnlySpan<string[]> names, byte index, GameVersion version, uint pid, ushort species, byte level)
     {
         Nicknames = EncounterUtil.GetNamesForLanguage(names, index);
         TrainerNames = EncounterUtil.GetNamesForLanguage(names, (uint)(index + (names[1].Length >> 1)));
-        Version = game;
+        Version = version;
         PID = pid;
         Species = species;
         Level = level;
@@ -84,33 +86,33 @@ public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTr
 
     public PK3 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        var version = this.GetCompatibleVersion((GameVersion)tr.Game);
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language, version);
+        int language = (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
+        var version = this.GetCompatibleVersion(tr.Version);
         var pi = PersonalTable.E[Species];
         var pk = new PK3
         {
             Species = Species,
             CurrentLevel = Level,
 
-            Met_Location = Location,
-            Met_Level = Level,
-            Version = (byte)version,
+            MetLocation = Location,
+            MetLevel = Level,
+            Version = version,
             Ball = (byte)FixedBall,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
 
-            Language = lang,
-            OT_Gender = OTGender,
+            Language = language,
+            OriginalTrainerGender = OTGender,
             TID16 = TID16,
             SID16 = SID16,
         };
 
         // Italian LG Jynx untranslated from English name
-        if (Species == (int)Core.Species.Jynx && version == GameVersion.LG && lang == (int)LanguageID.Italian)
-            lang = 2;
-        pk.Nickname = Nicknames[lang];
-        pk.OT_Name = TrainerNames[lang];
+        if (Species == (int)Core.Species.Jynx && version == GameVersion.LG && language == (int)LanguageID.Italian)
+            language = 2;
+        pk.Nickname = Nicknames.Span[language];
+        pk.OriginalTrainerName = TrainerNames.Span[language];
 
-        EncounterUtil1.SetEncounterMoves(pk, Version, Level);
+        EncounterUtil.SetEncounterMoves(pk, Version, Level);
         SetPINGA(pk, criteria);
 
         pk.ResetPartyStats();
@@ -119,7 +121,7 @@ public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTr
         return pk;
     }
 
-    private void SetPINGA(PK3 pk, EncounterCriteria criteria)
+    private void SetPINGA(PK3 pk, in EncounterCriteria criteria)
     {
         pk.PID = PID;
         criteria.SetRandomIVs(pk, IVs);
@@ -147,9 +149,9 @@ public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTr
             return false;
         if (pk.Gender != Gender)
             return false;
-        if (pk.OT_Gender != OTGender)
+        if (pk.OriginalTrainerGender != OTGender)
             return false;
-        if (pk.Egg_Location != 0)
+        if (pk.EggLocation != 0)
             return false;
         if (pk is IContestStatsReadOnly s && s.IsContestBelow(this))
             return false;
@@ -161,19 +163,41 @@ public sealed record EncounterTrade3 : IEncounterable, IEncounterMatch, IFixedTr
 
     public bool IsTrainerMatch(PKM pk, ReadOnlySpan<char> trainer, int language)
     {
-        if (Species == (int)Core.Species.Jynx && pk.Version == (int)GameVersion.LG && language == (int)LanguageID.Italian)
+        if (Species == (int)Core.Species.Jynx && pk.Version == GameVersion.LG && language == (int)LanguageID.Italian)
             language = 2;
-        return language != 0 && (uint)language < TrainerNames.Length && trainer.SequenceEqual(TrainerNames[language]);
+
+        var names = TrainerNames.Span;
+        if (language == 0 || (uint)language >= names.Length)
+            return false;
+        var name = names[language];
+        if (pk.Context == EntityContext.Gen3)
+            return trainer.SequenceEqual(name);
+
+        Span<char> tmp = stackalloc char[name.Length];
+        StringConverter345.TransferGlyphs34(name, language, tmp);
+        return trainer.SequenceEqual(tmp);
     }
 
     public bool IsNicknameMatch(PKM pk, ReadOnlySpan<char> nickname, int language)
     {
-        if (Species == (int)Core.Species.Jynx && pk.Version == (int)GameVersion.LG && language == (int)LanguageID.Italian)
+        if (Species == (int)Core.Species.Jynx && pk.Version == GameVersion.LG && language == (int)LanguageID.Italian)
             language = 2;
-        return language != 0 && (uint)language < Nicknames.Length && nickname.SequenceEqual(Nicknames[language]);
+
+        var names = Nicknames.Span;
+        if (language == 0 || (uint)language >= names.Length)
+            return false;
+        var name = names[language];
+        if (pk.Context == EntityContext.Gen3)
+            return nickname.SequenceEqual(name);
+
+        Span<char> tmp = stackalloc char[name.Length];
+        StringConverter345.TransferGlyphs34(name, language, tmp);
+        if (pk.Context >= EntityContext.Gen6)
+            StringConverter345.TransferGlyphs56(tmp); // Apostrophe ' vs ’
+        return nickname.SequenceEqual(tmp);
     }
 
-    public string GetNickname(int language) => (uint)language < Nicknames.Length ? Nicknames[language] : Nicknames[0];
+    public string GetNickname(int language) => Nicknames.Span[(uint)language < Nicknames.Length ? language : 0];
 
     #endregion
 }

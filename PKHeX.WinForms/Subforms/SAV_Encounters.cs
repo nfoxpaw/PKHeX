@@ -1,16 +1,17 @@
 using PKHeX.Core;
 using PKHeX.Core.Searching;
+using PKHeX.Drawing.PokeSprite;
 using PKHeX.WinForms.Controls;
+using PKHeX.WinForms.Properties;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using PKHeX.Drawing.PokeSprite;
-using PKHeX.WinForms.Properties;
 using static PKHeX.Core.MessageStrings;
 
 namespace PKHeX.WinForms;
@@ -24,9 +25,20 @@ public partial class SAV_Encounters : Form
     private readonly CancellationTokenSource TokenSource = new();
     private readonly EntityInstructionBuilder UC_Builder;
 
+    private const int GridWidth = 6;
+    private const int GridHeight = 11;
+
+    // Criteria backing value (edited via PropertyGrid)
+    private EncounterCriteria _criteriaValue = EncounterCriteria.Unrestricted;
+
     public SAV_Encounters(PKMEditor f1, TrainerDatabase db)
     {
         InitializeComponent();
+
+        var settings = new TabPage { Text = "Settings", Name = "Tab_Settings" };
+        settings.Controls.Add(new PropertyGrid { Dock = DockStyle.Fill, SelectedObject = Main.Settings.EncounterDb });
+        TC_SearchOptions.Controls.Add(settings);
+
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
         UC_Builder = new EntityInstructionBuilder(() => f1.PreparePKM())
         {
@@ -44,7 +56,7 @@ public partial class SAV_Encounters : Form
         var grid = EncounterPokeGrid;
         var smallWidth = grid.Width;
         var smallHeight = grid.Height;
-        grid.InitializeGrid(6, 11, SpriteUtil.Spriter);
+        grid.InitializeGrid(GridWidth, GridHeight, SpriteUtil.Spriter);
         grid.SetBackground(Resources.box_wp_clean);
         var newWidth = grid.Width;
         var newHeight = grid.Height;
@@ -55,24 +67,20 @@ public partial class SAV_Encounters : Form
         if (hdelta != 0)
             Height += hdelta;
 
-        PKXBOXES = grid.Entries.ToArray();
+        PKXBOXES = [..grid.Entries];
 
         // Enable Scrolling when hovered over
         foreach (var slot in PKXBOXES)
         {
             // Enable Click
-            slot.MouseClick += (sender, e) =>
+            slot.MouseClick += (_, e) =>
             {
-                if (sender == null)
-                    return;
                 if (ModifierKeys == Keys.Control)
-                    ClickView(sender, e);
+                    ClickView(slot, e);
             };
-            slot.Enter += (sender, e) =>
+            slot.Enter += (_, _) =>
             {
-                if (sender is not PictureBox pb)
-                    return;
-                var index = Array.IndexOf(PKXBOXES, sender);
+                var index = PKXBOXES.IndexOf(slot);
                 if (index < 0)
                     return;
                 index += (SCR_Box.Value * RES_MIN);
@@ -80,30 +88,74 @@ public partial class SAV_Encounters : Form
                     return;
 
                 var enc = Results[index];
-                pb.AccessibleDescription = string.Join(Environment.NewLine, enc.GetTextLines());
+                slot.AccessibleDescription = string.Join(Environment.NewLine, enc.GetTextLines());
             };
             slot.ContextMenuStrip = mnu;
             if (Main.Settings.Hover.HoverSlotShowText)
-                slot.MouseEnter += (o, args) => ShowHoverTextForSlot(slot, args);
+                slot.MouseEnter += (_, _) => ShowHoverTextForSlot(slot);
         }
 
         Counter = L_Count.Text;
-        L_Viewed.Text = string.Empty; // invis for now
-        L_Viewed.MouseEnter += (sender, e) => hover.SetToolTip(L_Viewed, L_Viewed.Text);
+        L_Viewed.Text = string.Empty; // invisible for now
+        L_Viewed.MouseEnter += (_, _) => hover.SetToolTip(L_Viewed, L_Viewed.Text);
         PopulateComboBoxes();
 
-        WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
         GetTypeFilters();
+
+        // Initialize criteria PropertyGrid with default value
+        UpdateCriteriaPropertyGrid(BuildCriteriaFromTabs());
 
         // Load Data
         L_Count.Text = "Ready...";
 
         CenterToParent();
+        CheckIsSearchDisallowed();
+
+        if (Application.IsDarkModeEnabled)
+        {
+            WinFormsUtil.InvertToolStripIcons(menuStrip1.Items);
+            WinFormsUtil.InvertToolStripIcons(mnu.Items);
+        }
+    }
+
+    private void UpdateCriteriaPropertyGrid(EncounterCriteria value)
+    {
+        _criteriaValue = value;
+        PG_Criteria.SelectedObject = _criteriaValue; // box the struct for PropertyGrid
+    }
+
+    private void PG_Criteria_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
+    {
+        if (PG_Criteria.SelectedObject is EncounterCriteria crit)
+            _criteriaValue = crit; // unbox updated value back into our field
+    }
+
+    private void CriteriaReset_Click(object? sender, EventArgs e)
+    {
+        UpdateCriteriaPropertyGrid(EncounterCriteria.Unrestricted);
+        WinFormsUtil.Asterisk();
+    }
+
+    private void CriteriaFromTabs_Click(object? sender, EventArgs e)
+    {
+        UpdateCriteriaPropertyGrid(BuildCriteriaFromTabs());
+        WinFormsUtil.Asterisk();
+    }
+
+    private EncounterCriteria BuildCriteriaFromTabs()
+    {
+        var editor = PKME_Tabs.Data;
+        var set = new ShowdownSet(editor);
+        var mutations = EncounterMutationUtil.GetSuggested(editor.Context, set.Level);
+        var criteria = EncounterCriteria.GetCriteria(set, editor.PersonalInfo, mutations);
+        if (editor.Context.IsHyperTrainingAvailable(100))
+            criteria = criteria.ReviseIVsHyperTrainAvailable();
+        return criteria;
     }
 
     private void GetTypeFilters()
     {
-        var types = (EncounterTypeGroup[])Enum.GetValues(typeof(EncounterTypeGroup));
+        var types = Enum.GetValues<EncounterTypeGroup>();
         var checks = types.Select(z => new CheckBox
         {
             Name = z.ToString(),
@@ -117,21 +169,30 @@ public partial class SAV_Encounters : Form
         {
             TypeFilters.Controls.Add(chk);
             TypeFilters.SetFlowBreak(chk, true);
+            chk.Click += (_, _) =>
+            {
+                if ((ModifierKeys & Keys.Shift) != 0)
+                {
+                    foreach (var c in TypeFilters.Controls.OfType<CheckBox>())
+                        c.Checked = c == chk;
+                }
+            };
+            chk.CheckStateChanged += (_, _) => CheckIsSearchDisallowed();
         }
     }
 
     private EncounterTypeGroup[] GetTypes()
     {
         return TypeFilters.Controls.OfType<CheckBox>().Where(z => z.Checked).Select(z => z.Name)
-            .Select(z => (EncounterTypeGroup)Enum.Parse(typeof(EncounterTypeGroup), z)).ToArray();
+            .Select(Enum.Parse<EncounterTypeGroup>).ToArray();
     }
 
     private readonly PictureBox[] PKXBOXES;
-    private List<IEncounterInfo> Results = new();
+    private List<IEncounterInfo> Results = [];
     private int slotSelected = -1; // = null;
     private Image? slotColor;
-    private const int RES_MAX = 66;
-    private const int RES_MIN = 6;
+    private const int RES_MIN = GridWidth * 1;
+    private const int RES_MAX = GridWidth * GridHeight;
     private readonly string Counter;
 
     private bool GetShiftedIndex(ref int index)
@@ -145,24 +206,33 @@ public partial class SAV_Encounters : Form
     // Important Events
     private void ClickView(object sender, EventArgs e)
     {
-        var pb = WinFormsUtil.GetUnderlyingControl<PictureBox>(sender);
-        int index = Array.IndexOf(PKXBOXES, pb);
+        if (!WinFormsUtil.TryGetUnderlying<PictureBox>(sender, out var pb))
+            ArgumentNullException.ThrowIfNull(pb);
+        int index = PKXBOXES.IndexOf(pb);
         if (index >= RES_MAX)
         {
-            System.Media.SystemSounds.Exclamation.Play();
+            WinFormsUtil.Exclamation();
             return;
         }
         index += SCR_Box.Value * RES_MIN;
         if (index >= Results.Count)
         {
-            System.Media.SystemSounds.Exclamation.Play();
+            WinFormsUtil.Exclamation();
             return;
         }
 
         var enc = Results[index];
         var criteria = GetCriteria(enc, Main.Settings.EncounterDb);
         var trainer = Trainers.GetTrainer(enc.Version, enc.Generation <= 2 ? (LanguageID)SAV.Language : null) ?? SAV;
-        var pk = enc.ConvertToPKM(trainer, criteria);
+        var temp = enc.ConvertToPKM(trainer, criteria);
+        var pk = EntityConverter.ConvertToType(temp, SAV.PKMType, out var c);
+        if (pk is null)
+        {
+            WinFormsUtil.Error(c.GetDisplayString(temp, SAV.PKMType));
+            return;
+        }
+
+        SAV.AdaptToSaveFile(pk);
         pk.RefreshChecksum();
         PKME_Tabs.PopulateFields(pk, false);
         slotSelected = index;
@@ -170,7 +240,7 @@ public partial class SAV_Encounters : Form
         FillPKXBoxes(SCR_Box.Value);
     }
 
-    private EncounterCriteria GetCriteria(ISpeciesForm enc, EncounterDatabaseSettings settings)
+    private EncounterCriteria GetCriteria(IEncounterTemplate enc, EncounterDatabaseSettings settings)
     {
         if (!settings.UseTabsAsCriteria)
             return EncounterCriteria.Unrestricted;
@@ -185,10 +255,9 @@ public partial class SAV_Encounters : Form
                 return EncounterCriteria.Unrestricted;
         }
 
-        var set = new ShowdownSet(editor);
-        var criteria = EncounterCriteria.GetCriteria(set, editor.PersonalInfo);
-        if (!isInChain)
-            criteria = criteria with { Gender = FixedGenderUtil.GenderRandom }; // Genderless tabs and a gendered enc -> let's play safe.
+        var criteria = _criteriaValue;
+        if (!isInChain || EntityGender.IsSingleGender(enc.Species))
+            criteria = criteria with { Gender = Gender.Random }; // Genderless tabs and a gendered enc -> let's play safe.
         return criteria;
     }
 
@@ -199,28 +268,29 @@ public partial class SAV_Encounters : Form
         CB_GameOrigin.InitializeBinding();
 
         var Any = new ComboItem(MsgAny, 0);
+        var filtered = GameInfo.FilteredSources;
+        var source = filtered.Source;
+        var species = new List<ComboItem>(source.SpeciesDataSource)
+        {
+            [0] = Any // Replace (None) with "Any"
+        };
+        CB_Species.DataSource = species;
 
-        var DS_Species = new List<ComboItem>(GameInfo.SpeciesDataSource);
-        DS_Species.RemoveAt(0); DS_Species.Insert(0, Any); CB_Species.DataSource = DS_Species;
-
-        // Set the Move ComboBoxes too..
-        var DS_Move = new List<ComboItem>(GameInfo.MoveDataSource);
+        // Set the Move ComboBoxes too.
+        var DS_Move = new List<ComboItem>(filtered.Moves);
         DS_Move.RemoveAt(0); DS_Move.Insert(0, Any);
         {
             foreach (ComboBox cb in new[] { CB_Move1, CB_Move2, CB_Move3, CB_Move4 })
             {
                 cb.InitializeBinding();
-                cb.DataSource = new BindingSource(DS_Move, null);
+                cb.DataSource = new BindingSource(DS_Move, string.Empty);
             }
         }
 
-        var DS_Version = new List<ComboItem>(GameInfo.VersionDataSource);
+        var DS_Version = new List<ComboItem>(source.VersionDataSource);
         DS_Version.Insert(0, Any);
         DS_Version.RemoveAt(DS_Version.Count - 1);
         CB_GameOrigin.DataSource = DS_Version;
-
-        // Trigger a Reset
-        ResetFilters(this, EventArgs.Empty);
     }
 
     private void ResetFilters(object sender, EventArgs e)
@@ -230,12 +300,18 @@ public partial class SAV_Encounters : Form
         CB_GameOrigin.SelectedIndex = 0;
 
         RTB_Instructions.Clear();
-        if (sender == this)
-            return; // still starting up
+        CHK_Shiny.CheckState = CHK_IsEgg.CheckState = CheckState.Indeterminate;
         foreach (var chk in TypeFilters.Controls.OfType<CheckBox>())
             chk.Checked = true;
 
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        foreach (var cb in TLP_Filters.Controls.OfType<ComboBox>())
+            cb.SelectedIndex = cb.SelectionLength = 0;
     }
 
     // View Updates
@@ -244,53 +320,49 @@ public partial class SAV_Encounters : Form
         var settings = GetSearchSettings();
 
         // If nothing is specified, instead of just returning all possible encounters, just return nothing.
-        if (settings is { Species: 0, Moves.Count: 0 } && Main.Settings.EncounterDb.ReturnNoneIfEmptySearch)
-            return Array.Empty<IEncounterInfo>();
+        if (DisallowSearch(settings))
+            return [];
         var pk = SAV.BlankPKM;
 
         var moves = settings.Moves.ToArray();
         var versions = settings.GetVersions(SAV);
-        var species = settings.Species == 0 ? GetFullRange(SAV.MaxSpeciesID) : new[] { settings.Species };
+        var species = settings.Species == 0 ? GetFullRange(SAV.MaxSpeciesID) : [settings.Species];
         var results = GetAllSpeciesFormEncounters(species, SAV.Personal, versions, moves, pk, token);
-        if (settings.SearchEgg != null)
-            results = results.Where(z => z.EggEncounter == settings.SearchEgg);
-        if (settings.SearchShiny != null)
+        if (settings.SearchEgg is not null)
+            results = results.Where(z => z.IsEgg == settings.SearchEgg);
+        if (settings.SearchShiny is not null)
             results = results.Where(z => z.IsShiny == settings.SearchShiny);
 
         // return filtered results
         var comparer = new ReferenceComparer<IEncounterInfo>();
         results = results.Distinct(comparer); // only distinct objects
 
-        static Func<IEncounterInfo, bool> IsPresent<TTable>(TTable pt) where TTable : IPersonalTable => z =>
-        {
-            if (pt.IsPresentInGame(z.Species, z.Form))
-                return true;
-            return z is IEncounterFormRandom { IsRandomUnspecificForm: true } && pt.IsSpeciesInGame(z.Species);
-        };
         if (Main.Settings.EncounterDb.FilterUnavailableSpecies)
         {
-            results = SAV switch
-            {
-                SAV9SV s9 => results.Where(IsPresent(s9.Personal)),
-                SAV8SWSH s8 => results.Where(IsPresent(s8.Personal)),
-                SAV8BS b8 => results.Where(IsPresent(b8.Personal)),
-                SAV8LA a8 => results.Where(IsPresent(a8.Personal)),
-                _ => results.Where(z => z.Generation <= 7),
-            };
+            var filter = EntityPresenceFilters.GetFilterGeneric<IEncounterInfo>(SAV.Context);
+            if (filter != null)
+                results = results.Where(filter);
         }
 
         if (token.IsCancellationRequested)
             return results;
 
         ReadOnlySpan<char> batchText = RTB_Instructions.Text;
-        if (batchText.Length > 0 && !StringInstructionSet.HasEmptyLine(batchText))
+        if (batchText.Length != 0 && !StringInstructionSet.HasEmptyLine(batchText))
         {
             var filters = StringInstruction.GetFilters(batchText);
-            BatchEditing.ScreenStrings(filters);
-            results = results.Where(enc => BatchEditing.IsFilterMatch(filters, enc)); // Compare across all filters
+            EntityBatchEditor.ScreenStrings(filters);
+            results = results.Where(enc => BatchEditingUtil.IsFilterMatch(filters, enc)); // Compare across all filters
         }
 
         return results;
+    }
+
+    private bool DisallowSearch(SearchSettings settings)
+    {
+        if (TypeFilters.Controls.OfType<CheckBox>().All(z => !z.Checked))
+            return false; // no types selected
+        return settings is { Species: 0, Moves.Count: 0 } && Main.Settings.EncounterDb.ReturnNoneIfEmptySearch;
     }
 
     private static IEnumerable<ushort> GetFullRange(int max)
@@ -299,7 +371,7 @@ public partial class SAV_Encounters : Form
             yield return i;
     }
 
-    private IEnumerable<IEncounterInfo> GetAllSpeciesFormEncounters(IEnumerable<ushort> species, IPersonalTable pt, IReadOnlyList<GameVersion> versions, ushort[] moves, PKM pk, CancellationToken token)
+    private IEnumerable<IEncounterInfo> GetAllSpeciesFormEncounters(IEnumerable<ushort> species, IPersonalTable pt, ReadOnlyMemory<GameVersion> versions, ReadOnlyMemory<ushort> moves, PKM pk, CancellationToken token)
     {
         foreach (var s in species)
         {
@@ -327,11 +399,11 @@ public partial class SAV_Encounters : Form
 
     private sealed class ReferenceComparer<T> : IEqualityComparer<T> where T : class
     {
-        public bool Equals(T? x, T? y)
+        public bool Equals([NotNullWhen(true)] T? x, [NotNullWhen(true)] T? y)
         {
-            if (x == null)
+            if (x is null)
                 return false;
-            if (y == null)
+            if (y is null)
                 return false;
             return RuntimeHelpers.GetHashCode(x).Equals(RuntimeHelpers.GetHashCode(y));
         }
@@ -339,7 +411,7 @@ public partial class SAV_Encounters : Form
         public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
     }
 
-    private IEnumerable<IEncounterInfo> GetEncounters(ushort species, byte form, ushort[] moves, PKM pk, IReadOnlyList<GameVersion> vers)
+    private IEnumerable<IEncounterInfo> GetEncounters(ushort species, byte form, ReadOnlyMemory<ushort> moves, PKM pk, ReadOnlyMemory<GameVersion> vers)
     {
         pk.Species = species;
         pk.Form = form;
@@ -352,13 +424,13 @@ public partial class SAV_Encounters : Form
     {
         var settings = new SearchSettings
         {
-            Format = SAV.Generation, // 0->(n-1) => 1->n
+            Context = SAV.Context,
             Generation = SAV.Generation,
 
             Species = GetU16(CB_Species),
 
             BatchInstructions = RTB_Instructions.Text,
-            Version = WinFormsUtil.GetIndex(CB_GameOrigin),
+            Version = (GameVersion)WinFormsUtil.GetIndex(CB_GameOrigin),
         };
 
         static ushort GetU16(ListControl cb)
@@ -383,33 +455,41 @@ public partial class SAV_Encounters : Form
         return settings;
     }
 
+    // ReSharper disable once AsyncVoidMethod
     private async void B_Search_Click(object sender, EventArgs e)
     {
-        B_Search.Enabled = false;
-        EncounterMovesetGenerator.PriorityList = GetTypes();
-
-        var token = TokenSource.Token;
-        var search = SearchDatabase(token);
-        if (token.IsCancellationRequested)
+        try
         {
-            EncounterMovesetGenerator.ResetFilters();
-            return;
-        }
+            B_Search.Enabled = false;
+            EncounterMovesetGenerator.PriorityList = GetTypes();
 
-        var results = await Task.Run(() => search.ToList(), token).ConfigureAwait(true);
-        if (token.IsCancellationRequested)
+            var token = TokenSource.Token;
+            var search = SearchDatabase(token);
+            if (token.IsCancellationRequested)
+            {
+                EncounterMovesetGenerator.ResetFilters();
+                return;
+            }
+
+            var results = await Task.Run(search.ToList, token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                EncounterMovesetGenerator.ResetFilters();
+                return;
+            }
+
+            if (results.Count == 0)
+                WinFormsUtil.Alert(MsgDBSearchNone);
+
+            SetResults(results); // updates Count Label as well.
+            WinFormsUtil.Asterisk();
+            B_Search.Enabled = true;
+            EncounterMovesetGenerator.ResetFilters();
+        }
+        catch
         {
-            EncounterMovesetGenerator.ResetFilters();
-            return;
+            // Ignore.
         }
-
-        if (results.Count == 0)
-            WinFormsUtil.Alert(MsgDBSearchNone);
-
-        SetResults(results); // updates Count Label as well.
-        System.Media.SystemSounds.Asterisk.Play();
-        B_Search.Enabled = true;
-        EncounterMovesetGenerator.ResetFilters();
     }
 
     private void UpdateScroll(object sender, ScrollEventArgs e)
@@ -482,10 +562,9 @@ public partial class SAV_Encounters : Form
             FillPKXBoxes(SCR_Box.Value = newval);
     }
 
-    private void ShowHoverTextForSlot(object sender, EventArgs e)
+    private void ShowHoverTextForSlot(PictureBox pb)
     {
-        var pb = (PictureBox)sender;
-        int index = Array.IndexOf(PKXBOXES, pb);
+        int index = PKXBOXES.IndexOf(pb);
         if (!GetShiftedIndex(ref index))
             return;
 
@@ -503,8 +582,16 @@ public partial class SAV_Encounters : Form
         // If we already have text, add a new line (except if the last line is blank).
         var tb = RTB_Instructions;
         var batchText = tb.Text;
-        if (batchText.Length > 0 && !batchText.EndsWith('\n'))
+        if (batchText.Length != 0 && !batchText.EndsWith('\n'))
             tb.AppendText(Environment.NewLine);
-        RTB_Instructions.AppendText(s);
+        tb.AppendText(s);
+    }
+
+    private void CB_Species_SelectedIndexChanged(object sender, EventArgs e) => CheckIsSearchDisallowed();
+
+    private void CheckIsSearchDisallowed()
+    {
+        var settings = GetSearchSettings();
+        B_Search.Enabled = !DisallowSearch(settings);
     }
 }

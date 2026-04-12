@@ -2480,3 +2480,206 @@ Mortcha-Puder
 Neuanfangs-Mochi
 Rotom-Stick
 Glitzerpin
+Legierungsmetall
+Blaue Style-Karte
+Myrapla-Blatt
+Tentacha-Stachel
+Dodu-Daune
+Jurob-Haar
+Owei-Schale
+Rabauz-Schweiß
+Rihorn-Zahn
+Seeper-Tinte
+Elekid-Haar
+Magby-Haar
+Lapras-Träne
+Porygon-Splitter
+Lampi-Strom
+Snubbull-Haar
+Panzaeron-Feder
+Farbeagle-Tinte
+Plusle-Haar
+Minun-Haar
+Knacklion-Schale
+Tanhel-Kralle
+Koknodon-Stachel
+Schilterus-Kralle
+Elezeba-Mähnenhaar
+Rotomurf-Kralle
+Waumboll-Watte
+Zurrokex-Schweiß
+Picochilla-Haar
+Monozyto-Gel
+Wattzapf-Faden
+Golbit-Splitter
+Psiau-Haar
+Iscalar-Tinte
+Peppeck-Feder
+Araqua-Faden
+Curelei-Blüte
+Meteno-Schale
+Hokumil-Sahne
+Duraludon-Patina
+Arktos-Snack
+Zapdos-Snack
+Lavados-Snack
+Raikou-Snack
+Entei-Snack
+Suicune-Snack
+Lugia-Snack
+Ho-Oh-Snack
+Latias-Snack
+Latios-Snack
+Kyogre-Snack
+Groudon-Snack
+Rayquaza-Snack
+Kobalium-Snack
+Terrakium-Snack
+Viridium-Snack
+Reshiram-Snack
+Zekrom-Snack
+Kyurem-Snack
+Solgaleo-Snack
+Lunala-Snack
+Necrozma-Snack
+Dakuma-Snack
+Polaross-Snack
+Phantoross-Snack
+Indigoblaue Scheibe
+Flammen-Pikser
+Tera-Stück (Stellar)
+Mysteriöse Pirsifbeere
+Blaubeer-Tischtuch
+Blaubeer-Stühle
+Synchromaschine
+Meteorit
+Karmesinbuch
+Purpurbuch
+Briannas Buch
+Meistersamen
+Pixinit
+Sarzenianit
+Starmienit
+Dragoranit
+Meganienit
+Impergatornit
+Panzaeronit
+Frosdedjenit
+Heatranit
+Darkrainit
+Flambirexonit
+Stalobornit
+Cerapendranit
+Irokexonit
+Zapplarangonit
+Skelabranit
+Brigaronit
+Fennexisnit
+Quajutsunit
+Pyroleonit
+Floetteonit
+Calamaneronit
+Thanathoranit
+Tandraknit
+Resladeronit
+Zygardenit
+Sen-Longnit
+Zeraoranit
+Legiosnit
+Zimmerschlüssel 202
+Illumina-Gigalette
+Laborpass A
+Laborpass B
+Laborpass C
+
+
+Kieselstein
+Besonderer Ring
+Signierter Anhänger
+Gourmetmüll
+Vitalzweig
+Duros Tasche
+Illumina-Butter
+Superbutter
+Hyperbutter
+Ultrabutter
+Meisterbutter
+Dimensionsbutter
+Hoenn-Steinsalz
+Dunkelwürze
+Olithena-Öl
+Knisterbrause
+Wichtiger Brief
+Besonderer Ring
+Dreckiger Schal
+
+
+
+
+Mega-Splitter
+Bunte Schraube
+Roter Canary-Anhänger
+Roter Canary-Anhänger
+Roter Canary-Anhänger
+Goldener Canary-Anhänger
+Goldener Canary-Anhänger
+Goldener Canary-Anhänger
+Pinker Canary-Anhänger
+Pinker Canary-Anhänger
+Pinker Canary-Anhänger
+Grüner Canary-Anhänger
+Grüner Canary-Anhänger
+Grüner Canary-Anhänger
+Blauer Canary-Anhänger
+Blauer Canary-Anhänger
+Blauer Canary-Anhänger
+Raichunit X
+Raichunit Y
+Palimpalimonit
+Absolnit Z
+Staraptornit
+Knakracknit Z
+Lucarionit Z
+Golgantesnit
+Psiaugonit
+Krawellonit
+Tectassnit
+Magearnanit
+Halupenjonit
+Espinodonit
+Nigiraginit
+Lumifloranit
+Dimensions-Amrenabeere
+Dimensions-Maronbeere
+Dimensions-Pirsifbeere
+Dimensions-Fragiabeere
+Dimensions-Wilbirbeere
+Dimensions-Sinelbeere
+Dimensions-Persimbeere
+Dimensions-Prunusbeere
+Dimensions-Tsitrubeere
+Dimensions-Granabeere
+Dimensions-Setangbeere
+Dimensions-Qualotbeere
+Dimensions-Honmelbeere
+Dimensions-Labrusbeere
+Dimensions-Tamotbeere
+Dimensions-Koakobeere
+Dimensions-Foepasbeere
+Dimensions-Kerzalbeere
+Dimensions-Grindobeere
+Dimensions-Kiroyabeere
+Dimensions-Rospelbeere
+Dimensions-Grarzbeere
+Dimensions-Schukebeere
+Dimensions-Kobabeere
+Dimensions-Pyapabeere
+Dimensions-Tanigabeere
+Dimensions-Chiaribeere
+Dimensions-Zitarzbeere
+Dimensions-Terirobeere
+Dimensions-Burleobeere
+Dimensions-Babiribeere
+Dimensions-Latchibeere
+Dimensions-Hibisbeere
+Canary-Brot

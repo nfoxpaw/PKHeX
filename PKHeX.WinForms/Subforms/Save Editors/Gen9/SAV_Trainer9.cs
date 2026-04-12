@@ -15,7 +15,7 @@ public partial class SAV_Trainer9 : Form
     private readonly SaveFile Origin;
     private readonly SAV9SV SAV;
 
-    public SAV_Trainer9(SaveFile sav)
+    public SAV_Trainer9(SAV9SV sav)
     {
         InitializeComponent();
         WinFormsUtil.TranslateInterface(this, Main.CurrentLanguage);
@@ -27,8 +27,9 @@ public partial class SAV_Trainer9 : Form
             TB_OTName.Font = FontUtil.GetPKXFont();
         }
 
-        B_MaxCash.Click += (sender, e) => MT_Money.Text = SAV.MaxMoney.ToString();
-        B_MaxLP.Click += (sender, e) => MT_LP.Text = SAV.MaxMoney.ToString();
+        B_MaxCash.Click += (_, _) => MT_Money.Text = SAV.MaxMoney.ToString();
+        B_MaxLP.Click += (_, _) => MT_LP.Text = SAV.MaxMoney.ToString();
+        B_MaxBP.Click += (_, _) => MT_BP.Text = SAV.MaxMoney.ToString();
 
         var games = GameInfo.Strings.gamelist;
         CB_Game.Items.Clear();
@@ -43,12 +44,29 @@ public partial class SAV_Trainer9 : Form
         GetTextBoxes();
         LoadMap();
 
+        if (SAV.SaveRevision >= 2)
+            LoadBlueberry();
+        else
+            TC_Editor.TabPages.Remove(Tab_Blueberry);
+
         Loading = false;
+    }
+
+    private void LoadBlueberry()
+    {
+        var bbq = SAV.BlueberryQuestRecord;
+        MT_BP.Text = SAV.BlueberryPoints.ToString();
+        NUD_BBQSolo.Value = bbq.QuestsDoneSolo;
+        NUD_BBQGroup.Value = bbq.QuestsDoneGroup;
+
+        CB_ThrowStyle.Items.Clear();
+        CB_ThrowStyle.Items.AddRange(Util.GetStringList("throw_styles", Main.CurrentLanguage));
+        CB_ThrowStyle.SelectedIndex = (int)SAV.ThrowStyle - 1;
     }
 
     private void GetImages()
     {
-        static Image GetImage(SCBlockAccessor blocks, uint kd, uint kw, uint kh)
+        static Bitmap GetImage(SCBlockAccessor blocks, uint kd, uint kw, uint kh)
         {
             var data = blocks.GetBlock(kd).Data;
             var width = blocks.GetBlockValue<uint>(kw);
@@ -82,13 +100,13 @@ public partial class SAV_Trainer9 : Form
     private void GetComboBoxes()
     {
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
     }
 
     private void GetTextBoxes()
     {
         // Get Data
-        CB_Game.SelectedIndex = SAV.Game - (int)GameVersion.SL;
+        CB_Game.SelectedIndex = SAV.Version - GameVersion.SL;
         CB_Gender.SelectedIndex = SAV.Gender;
 
         // Display Data
@@ -104,12 +122,24 @@ public partial class SAV_Trainer9 : Form
         MT_Seconds.Text = SAV.PlayedSeconds.ToString();
 
         CAL_AdventureStartDate.Value = SAV.EnrollmentDate.Timestamp;
+        CAL_LastSavedDate.Value = CAL_LastSavedTime.Value = SAV.LastSaved.Timestamp;
     }
 
     private void Save()
     {
         SaveTrainerInfo();
         SaveMap();
+        if (SAV.SaveRevision >= 2)
+            SaveBlueberry();
+    }
+
+    private void SaveBlueberry()
+    {
+        var bbq = SAV.BlueberryQuestRecord;
+        SAV.BlueberryPoints = Util.ToUInt32(MT_BP.Text);
+        bbq.QuestsDoneSolo = (uint)NUD_BBQSolo.Value;
+        bbq.QuestsDoneGroup = (uint)NUD_BBQGroup.Value;
+        SAV.ThrowStyle = (ThrowStyle9)CB_ThrowStyle.SelectedIndex + 1;
     }
 
     private void SaveMap()
@@ -123,13 +153,16 @@ public partial class SAV_Trainer9 : Form
 
     private void SaveTrainerInfo()
     {
-        SAV.Game = (byte)(CB_Game.SelectedIndex + (int)GameVersion.SL);
+        SAV.Version = (GameVersion)(CB_Game.SelectedIndex + (byte)GameVersion.SL);
         SAV.Gender = (byte)CB_Gender.SelectedIndex;
 
         SAV.Money = Util.ToUInt32(MT_Money.Text);
         SAV.LeaguePoints = Util.ToUInt32(MT_LP.Text);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
-        SAV.OT = TB_OTName.Text;
+
+        // only modify if changed (preserve trash bytes?)
+        if (SAV.OT != TB_OTName.Text)
+            SAV.OT = TB_OTName.Text;
 
         // Save PlayTime
         SAV.PlayedHours = ushort.Parse(MT_Hours.Text);
@@ -137,18 +170,18 @@ public partial class SAV_Trainer9 : Form
         SAV.PlayedSeconds = ushort.Parse(MT_Seconds.Text) % 60;
 
         SAV.EnrollmentDate.Timestamp = CAL_AdventureStartDate.Value;
+        SAV.LastSaved.Timestamp = CAL_LastSavedDate.Value.Date.AddSeconds(CAL_LastSavedTime.Value.TimeOfDay.TotalSeconds);
+
+        if (SAV.Blocks.TryGetBlock(KBlueberryPoints, out var block))
+            block.SetValue(Util.ToUInt32(MT_BP.Text));
     }
 
     private void ClickOT(object sender, MouseEventArgs e)
     {
-        TextBox tb = sender as TextBox ?? TB_OTName;
         // Special Character Form
         if (ModifierKeys != Keys.Control)
             return;
-
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        TrashEditor.Show(TB_OTName, SAV, SAV.MyStatus.OriginalTrainerTrash);
     }
 
     private void B_Cancel_Click(object sender, EventArgs e)
@@ -176,9 +209,7 @@ public partial class SAV_Trainer9 : Form
         if (Util.ToInt32(box.Text) > 255) box.Text = "255";
     }
 
-    private void B_UnlockFlyLocations_Click(object sender, EventArgs e) => UnlockFlyLocations();
-
-    private void UnlockFlyLocations()
+    private void B_UnlockFlyLocations_Click(object sender, EventArgs e)
     {
         var accessor = SAV.Accessor;
         foreach (var hash in FlyHashes)
@@ -186,11 +217,12 @@ public partial class SAV_Trainer9 : Form
             if (accessor.TryGetBlock(hash, out var block))
                 block.ChangeBooleanType(SCTypeCode.Bool2);
         }
-        System.Media.SystemSounds.Asterisk.Play();
+        B_UnlockFlyLocations.Enabled = false;
+        WinFormsUtil.Asterisk();
     }
 
-    private static ReadOnlySpan<uint> FlyHashes => new[]
-    {
+    private static ReadOnlySpan<uint> FlyHashes =>
+    [
         #region Fly Flags
         FSYS_YMAP_FLY_01,
         FSYS_YMAP_FLY_02,
@@ -284,39 +316,78 @@ public partial class SAV_Trainer9 : Form
         FSYS_YMAP_FLY_SU1_SPOT04,
         FSYS_YMAP_FLY_SU1_SPOT05,
         FSYS_YMAP_FLY_SU1_SPOT06,
+
+        // Sudachi 2
+        FSYS_YMAP_S2_MAPCHANGE_ENABLE, // can change map to Blueberry Academy
+        FSYS_YMAP_FLY_SU2_DRAGON,
+        FSYS_YMAP_FLY_SU2_ENTRANCE,
+        FSYS_YMAP_FLY_SU2_FAIRY,
+        FSYS_YMAP_FLY_SU2_HAGANE,
+        FSYS_YMAP_FLY_SU2_HONOO,
+        FSYS_YMAP_FLY_SU2_SPOT01,
+        FSYS_YMAP_FLY_SU2_SPOT02,
+        FSYS_YMAP_FLY_SU2_SPOT03,
+        FSYS_YMAP_FLY_SU2_SPOT04,
+        FSYS_YMAP_FLY_SU2_SPOT05,
+        FSYS_YMAP_FLY_SU2_SPOT06,
+        FSYS_YMAP_FLY_SU2_SPOT07,
+        FSYS_YMAP_FLY_SU2_SPOT08,
+        FSYS_YMAP_FLY_SU2_SPOT09,
+        FSYS_YMAP_FLY_SU2_SPOT10,
+        FSYS_YMAP_FLY_SU2_SPOT11,
+        FSYS_YMAP_POKECEN_SU02,
         #endregion
-    };
+    ];
 
     private void B_CollectAllStakes_Click(object sender, EventArgs e)
     {
         SAV.CollectAllStakes();
-        System.Media.SystemSounds.Asterisk.Play();
+        B_CollectAllStakes.Enabled = false;
+        WinFormsUtil.Asterisk();
     }
 
     private void B_UnlockTMRecipes_Click(object sender, EventArgs e)
     {
         SAV.UnlockAllTMRecipes();
-        System.Media.SystemSounds.Asterisk.Play();
+        B_UnlockTMRecipes.Enabled = false;
+        WinFormsUtil.Asterisk();
+    }
+
+    private void B_ActivateSnacksworthLegendaries_Click(object sender, EventArgs e)
+    {
+        SAV.ActivateSnacksworthLegendaries();
+        B_ActivateSnacksworthLegendaries.Enabled = false;
+        WinFormsUtil.Asterisk();
+    }
+
+    private void B_UnlockCoaches_Click(object sender, EventArgs e)
+    {
+        SAV.UnlockAllCoaches();
+        B_UnlockCoaches.Enabled = false;
+        WinFormsUtil.Asterisk();
     }
 
     private void B_UnlockBikeUpgrades_Click(object sender, EventArgs e)
     {
-        var blocks = new[]
-        {
+        string[] blocks =
+        [
             "FSYS_RIDE_DASH_ENABLE",
             "FSYS_RIDE_SWIM_ENABLE",
             "FSYS_RIDE_HIJUMP_ENABLE",
             "FSYS_RIDE_GLIDE_ENABLE",
             "FSYS_RIDE_CLIMB_ENABLE",
-        };
+        ];
 
         var accessor = SAV.Accessor;
         foreach (var block in blocks)
             accessor.GetBlock(block).ChangeBooleanType(SCTypeCode.Bool2);
-        System.Media.SystemSounds.Asterisk.Play();
+        if (accessor.TryGetBlock("FSYS_RIDE_FLIGHT_ENABLE", out var fly))
+            fly.ChangeBooleanType(SCTypeCode.Bool2); // Base & DLC1 saves do not have this block
+        B_UnlockBikeUpgrades.Enabled = false;
+        WinFormsUtil.Asterisk();
     }
 
-    private static void IMG_Save(Image image, string name)
+    public static void IMG_Save(Image image, string name)
     {
         var sfd = new SaveFileDialog
         {
@@ -334,17 +405,25 @@ public partial class SAV_Trainer9 : Form
             _ => ImageFormat.Png,
         };
         image.Save(path, format);
-        System.Media.SystemSounds.Asterisk.Play();
+        WinFormsUtil.Asterisk();
     }
 
-    private void P_CurrPhoto_Click(object sender, EventArgs e) => IMG_Save(P_CurrPhoto.Image, "current_photo");
-    private void P_CurrIcon_Click(object sender, EventArgs e) => IMG_Save(P_CurrIcon.Image, "current_icon");
-    private void P_InitialIcon_Click(object sender, EventArgs e) => IMG_Save(P_InitialIcon.Image, "initial_icon");
+    private void P_CurrPhoto_Click(object sender, EventArgs e) => IMG_Save(P_CurrPhoto.Image!, "current_photo");
+    private void P_CurrIcon_Click(object sender, EventArgs e) => IMG_Save(P_CurrIcon.Image!, "current_icon");
+    private void P_InitialIcon_Click(object sender, EventArgs e) => IMG_Save(P_InitialIcon.Image!, "initial_icon");
 
     private void B_UnlockClothing_Click(object sender, EventArgs e)
     {
         var accessor = SAV.Accessor;
         PlayerFashionUnlock9.UnlockBase(accessor, SAV.Gender);
-        System.Media.SystemSounds.Asterisk.Play();
+        B_UnlockClothing.Enabled = false;
+        WinFormsUtil.Asterisk();
+    }
+
+    private void B_UnlockThrowStyles_Click(object sender, EventArgs e)
+    {
+        SAV.UnlockAllThrowStyles();
+        B_UnlockThrowStyles.Enabled = false;
+        WinFormsUtil.Asterisk();
     }
 }

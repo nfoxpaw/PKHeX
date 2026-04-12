@@ -8,8 +8,8 @@ namespace PKHeX.Core;
 /// </summary>
 internal static class AbilityBreedLegality
 {
-    private static ReadOnlySpan<byte> BanHidden5 => new byte[]
-    {
+    private static ReadOnlySpan<byte> BanHidden5 =>
+    [
         0x92, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
         0x10, 0x10, 0x20, 0x00, 0x01, 0x11, 0x02, 0x00, 0x49, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x10, 0x00, 0x90, 0x04,
@@ -18,10 +18,10 @@ internal static class AbilityBreedLegality
         0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x82, 0x24, 0x80, 0x0A, 0x00,
         0x00, 0x0C, 0x00, 0x00, 0x44, 0x44, 0x00, 0x00, 0xA0, 0x84, 0x80,
         0x40, 0x08, 0x12,
-    };
+    ];
 
     /// <summary>
-    /// Species that cannot be bred with a Hidden Ability originating in <see cref="GameVersion.Gen5"/>
+    /// Species that cannot be bred with a Hidden Ability originating in <see cref="EntityContext.Gen5"/>
     /// </summary>
     public static bool IsHiddenPossible5(ushort species)
     {
@@ -29,11 +29,11 @@ internal static class AbilityBreedLegality
         var table = BanHidden5;
         if (index >= table.Length)
             return true;
-        return (BanHidden5[index] & (1 << (species & 7))) == 0;
+        return (table[index] & (1 << (species & 7))) == 0;
     }
 
     /// <summary>
-    /// Species that cannot be bred with a Hidden Ability originating in <see cref="GameVersion.Gen6"/>
+    /// Species that cannot be bred with a Hidden Ability originating in <see cref="EntityContext.Gen6"/>
     /// </summary>
     public static bool IsHiddenPossible6(ushort species, byte form) => species switch
     {
@@ -54,7 +54,7 @@ internal static class AbilityBreedLegality
     };
 
     /// <summary>
-    /// Species that cannot be bred with a Hidden Ability originating in <see cref="GameVersion.Gen7"/>
+    /// Species that cannot be bred with a Hidden Ability originating in <see cref="EntityContext.Gen7"/>
     /// </summary>
     public static bool IsHiddenPossible7(ushort species, byte form) => species switch
     {
@@ -74,7 +74,7 @@ internal static class AbilityBreedLegality
     };
 
     /// <summary>
-    /// Species that cannot be bred with a Hidden Ability originating in <see cref="GameVersion.BDSP"/>
+    /// Species that cannot be bred with a Hidden Ability originating in games that link together via HOME.
     /// </summary>
     public static bool IsHiddenPossibleHOME(ushort eggSpecies) => eggSpecies is not (int)Phione; // Everything else can!
 }

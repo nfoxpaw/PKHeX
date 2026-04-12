@@ -5,11 +5,11 @@ using System.Collections.Generic;
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find possible encounters for <see cref="GameVersion.Gen6"/> encounters.
+/// Iterates to find possible encounters for <see cref="EntityContext.Gen6"/> encounters.
 /// </summary>
 public record struct EncounterPossible6(EvoCriteria[] Chain, EncounterTypeGroup Flags, GameVersion Version) : IEnumerator<IEncounterable>
 {
-    public IEncounterable Current { get; private set; }
+    public IEncounterable Current { get; private set; } = null!;
 
     private int Index;
     private int SubIndex;
@@ -69,16 +69,16 @@ public record struct EncounterPossible6(EvoCriteria[] Chain, EncounterTypeGroup 
                 return SetCurrent(egg);
             case YieldState.BredTrade:
                 State = YieldState.BredSplit;
-                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg)Current);
+                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg6)Current);
                 return SetCurrent(egg);
             case YieldState.BredSplit:
-                if (!EncounterGenerator6.TryGetSplit((EncounterEgg)Current, Chain, out egg))
+                if (!EncounterGenerator6.TryGetSplit((EncounterEgg6)Current, Chain, out egg))
                     goto case YieldState.EventStart;
                 State = YieldState.BredSplitTrade;
                 return SetCurrent(egg);
             case YieldState.BredSplitTrade:
                 State = YieldState.EventStart;
-                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg)Current);
+                egg = EncounterGenerator6.MutateEggTrade((EncounterEgg6)Current);
                 return SetCurrent(egg);
 
             case YieldState.EventStart:
@@ -232,7 +232,7 @@ public record struct EncounterPossible6(EvoCriteria[] Chain, EncounterTypeGroup 
         for (; Index < db.Length;)
         {
             var enc = db[Index++];
-            if (!enc.CanBeReceivedByVersion((int)Version))
+            if (!enc.CanBeReceivedByVersion(Version))
                 continue;
             foreach (var evo in Chain)
             {

@@ -6,10 +6,11 @@ namespace PKHeX.Core;
 public sealed class EncounterGenerator1 : IEncounterGenerator
 {
     public static readonly EncounterGenerator1 Instance = new();
+    public bool CanGenerateEggs => false;
 
-    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
+    public IEnumerable<IEncounterable> GetPossible(PKM _, EvoCriteria[] chain, GameVersion version, EncounterTypeGroup groups)
     {
-        var iterator = new EncounterPossible1(chain, groups, game);
+        var iterator = new EncounterPossible1(chain, groups, version);
         foreach (var enc in iterator)
             yield return enc;
     }
@@ -19,14 +20,14 @@ public sealed class EncounterGenerator1 : IEncounterGenerator
         throw new ArgumentException("Generator does not support direct calls to this method.");
     }
 
-    public IEnumerable<IEncounterable> GetEncounters(PKM pk, GameVersion game)
+    public IEnumerable<IEncounterable> GetEncounters(PKM pk)
     {
         // Since encounter matching is super weak due to limited stored data in the structure
         // Calculate all 3 at the same time and pick the best result (by species).
         // Favor special event move gifts as Static Encounters when applicable
-        var chain = EncounterOrigin.GetOriginChain12(pk, game);
+        var chain = EncounterOrigin.GetOriginChain12(pk, 1, EntityContext.Gen1);
         if (chain.Length == 0)
-            return Array.Empty<IEncounterable>();
+            return [];
         return GetEncounters(pk, chain);
     }
 

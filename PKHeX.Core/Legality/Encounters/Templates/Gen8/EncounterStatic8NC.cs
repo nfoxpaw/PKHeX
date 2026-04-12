@@ -6,9 +6,9 @@ namespace PKHeX.Core;
 /// Generation 8 Nest Encounter (Distributed Crystal Data)
 /// </summary>
 /// <inheritdoc cref="EncounterStatic8Nest{T}"/>
-public sealed record EncounterStatic8NC(GameVersion Version) : EncounterStatic8Nest<EncounterStatic8NC>(Version), ILocation
+public sealed record EncounterStatic8NC(GameVersion Version) : EncounterStatic8Nest<EncounterStatic8NC>(Version), ILocation, IEncounterDownlevel
 {
-    int ILocation.Location => Watchtower;
+    ushort ILocation.Location => Watchtower;
     public const ushort Location = Watchtower;
     public override string Name => "Watchtower Crystal Den Encounter";
 
@@ -16,22 +16,26 @@ public sealed record EncounterStatic8NC(GameVersion Version) : EncounterStatic8N
 
     protected override bool IsMatchLocation(PKM pk)
     {
-        var loc = pk.Met_Location;
+        var loc = pk.MetLocation;
         return loc is SharedNest or Watchtower;
     }
 
+    private const byte SharedNestMinLevel = 20;
+
+    public byte GetDownleveledMin() => SharedNestMinLevel;
+
     protected override bool IsMatchLevel(PKM pk)
     {
-        var lvl = pk.Met_Level;
+        var lvl = pk.MetLevel;
         if (lvl == Level)
             return true;
 
         // Check downleveled (20-55)
         if (lvl > Level)
             return false;
-        if (lvl is < 20 or > 55)
+        if (lvl is < SharedNestMinLevel or > 55)
             return false;
-        if (pk is { Met_Location: Watchtower, IsShiny: true })
+        if (pk is { MetLocation: Watchtower, IsShiny: true })
             return false; // host cannot downlevel and be shiny
         return lvl % 5 == 0;
     }

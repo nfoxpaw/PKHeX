@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 
 namespace PKHeX.Core.Tests;
 
@@ -17,7 +18,7 @@ internal static class TestUtil
         return folder;
     }
 
-    private static readonly object InitLock = new();
+    private static readonly Lock InitLock = new();
     private static bool IsInitialized;
 
     public static void InitializeLegality()
@@ -26,7 +27,7 @@ internal static class TestUtil
         {
             if (IsInitialized)
                 return;
-            RibbonStrings.ResetDictionary(GameInfo.Strings.ribbons);
+            // There used to be a lot of static initialization in the legality code, which is now removed.
             IsInitialized = true;
         }
     }

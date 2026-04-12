@@ -32,7 +32,7 @@ public partial class SAV_Trainer8a : Form
     private void GetComboBoxes()
     {
         CB_Language.InitializeBinding();
-        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation);
+        CB_Language.DataSource = GameInfo.LanguageDataSource(SAV.Generation, SAV.Context);
     }
 
     private void GetTextBoxes()
@@ -62,11 +62,7 @@ public partial class SAV_Trainer8a : Form
         MT_Minutes.Text = SAV.PlayedMinutes.ToString();
         MT_Seconds.Text = SAV.PlayedSeconds.ToString();
 
-        if (SAV.LastSaved.LastSavedDate is { } d)
-            CAL_LastSavedDate.Value = CAL_LastSavedTime.Value = d;
-        else
-            CAL_LastSavedDate.Enabled = CAL_LastSavedTime.Enabled = false;
-
+        CAL_LastSavedDate.Value = CAL_LastSavedTime.Value = SAV.LastSaved.Timestamp;
         CAL_AdventureStartDate.Value = CAL_AdventureStartTime.Value = SAV.AdventureStart.Timestamp;
 
         LoadClamp(NUD_MeritCurrent, SaveBlockAccessor8LA.KMeritCurrent);
@@ -92,7 +88,10 @@ public partial class SAV_Trainer8a : Form
 
         SAV.Money = Util.ToUInt32(MT_Money.Text);
         SAV.Language = WinFormsUtil.GetIndex(CB_Language);
-        SAV.OT = TB_OTName.Text;
+
+        // only modify if changed (preserve trash bytes?)
+        if (SAV.OT != TB_OTName.Text)
+            SAV.OT = TB_OTName.Text;
 
         // Copy Position
         if (GB_Map.Enabled && MapUpdated)
@@ -115,8 +114,7 @@ public partial class SAV_Trainer8a : Form
 
         var advDay = CAL_AdventureStartDate.Value.Date;
         SAV.AdventureStart.Timestamp = advDay.AddSeconds(CAL_AdventureStartTime.Value.TimeOfDay.TotalSeconds);
-        if (CAL_LastSavedDate.Enabled)
-            SAV.LastSaved.LastSavedDate = CAL_LastSavedDate.Value.Date.AddSeconds(CAL_LastSavedTime.Value.TimeOfDay.TotalSeconds);
+        SAV.LastSaved.Timestamp = CAL_LastSavedDate.Value.Date.AddSeconds(CAL_LastSavedTime.Value.TimeOfDay.TotalSeconds);
 
         SAV.Blocks.SetBlockValue(SaveBlockAccessor8LA.KMeritCurrent, (uint)NUD_MeritCurrent.Value);
         SAV.Blocks.SetBlockValue(SaveBlockAccessor8LA.KMeritEarnedTotal, (uint)NUD_MeritEarned.Value);
@@ -126,20 +124,14 @@ public partial class SAV_Trainer8a : Form
 
     private void ClickOT(object sender, MouseEventArgs e)
     {
-        TextBox tb = sender as TextBox ?? TB_OTName;
+        var tb = TB_OTName;
         // Special Character Form
         if (ModifierKeys != Keys.Control)
             return;
-
-        var d = new TrashEditor(tb, SAV);
-        d.ShowDialog();
-        tb.Text = d.FinalString;
+        TrashEditor.Show(tb, SAV, SAV.MyStatus.OriginalTrainerTrash);
     }
 
-    private void B_Cancel_Click(object sender, EventArgs e)
-    {
-        Close();
-    }
+    private void B_Cancel_Click(object sender, EventArgs e) => Close();
 
     private void B_Save_Click(object sender, EventArgs e)
     {

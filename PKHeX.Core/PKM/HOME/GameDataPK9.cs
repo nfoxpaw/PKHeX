@@ -6,7 +6,7 @@ namespace PKHeX.Core;
 /// <summary>
 /// Side game data for <see cref="PK9"/> data transferred into HOME.
 /// </summary>
-public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize3, IGameDataSplitAbility
+public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize3, IGameDataSplitAbility, IGameDataSidePP
 {
     private const HomeGameDataFormat ExpectFormat = HomeGameDataFormat.PK9;
     private const int SIZE = HomeCrypto.SIZE_3GAME_PK9;
@@ -25,14 +25,14 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
     public ushort Move3 { get => ReadUInt16LittleEndian(Data[0x05..]); set => WriteUInt16LittleEndian(Data[0x05..], value); }
     public ushort Move4 { get => ReadUInt16LittleEndian(Data[0x07..]); set => WriteUInt16LittleEndian(Data[0x07..], value); }
 
-    public int Move1_PP    { get => Data[0x09]; set => Data[0x09] = (byte)value; }
-    public int Move2_PP    { get => Data[0x0A]; set => Data[0x0A] = (byte)value; }
-    public int Move3_PP    { get => Data[0x0B]; set => Data[0x0B] = (byte)value; }
-    public int Move4_PP    { get => Data[0x0C]; set => Data[0x0C] = (byte)value; }
-    public int Move1_PPUps { get => Data[0x0D]; set => Data[0x0D] = (byte)value; }
-    public int Move2_PPUps { get => Data[0x0E]; set => Data[0x0E] = (byte)value; }
-    public int Move3_PPUps { get => Data[0x0F]; set => Data[0x0F] = (byte)value; }
-    public int Move4_PPUps { get => Data[0x10]; set => Data[0x10] = (byte)value; }
+    public byte Move1_PP    { get => Data[0x09]; set => Data[0x09] = value; }
+    public byte Move2_PP    { get => Data[0x0A]; set => Data[0x0A] = value; }
+    public byte Move3_PP    { get => Data[0x0B]; set => Data[0x0B] = value; }
+    public byte Move4_PP    { get => Data[0x0C]; set => Data[0x0C] = value; }
+    public byte Move1_PPUps { get => Data[0x0D]; set => Data[0x0D] = value; }
+    public byte Move2_PPUps { get => Data[0x0E]; set => Data[0x0E] = value; }
+    public byte Move3_PPUps { get => Data[0x0F]; set => Data[0x0F] = value; }
+    public byte Move4_PPUps { get => Data[0x10]; set => Data[0x10] = value; }
 
     public ushort RelearnMove1 { get => ReadUInt16LittleEndian(Data[0x11..]); set => WriteUInt16LittleEndian(Data[0x11..], value); }
     public ushort RelearnMove2 { get => ReadUInt16LittleEndian(Data[0x13..]); set => WriteUInt16LittleEndian(Data[0x13..], value); }
@@ -40,9 +40,9 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
     public ushort RelearnMove4 { get => ReadUInt16LittleEndian(Data[0x17..]); set => WriteUInt16LittleEndian(Data[0x17..], value); }
     public MoveType TeraTypeOriginal { get => (MoveType)Data[0x19]; set => Data[0x19] = (byte)value; }
     public MoveType TeraTypeOverride { get => (MoveType)Data[0x1A]; set => Data[0x1A] = (byte)value; }
-    public int Ball { get => Data[0x1B]; set => Data[0x1B] = (byte)value; }
-    public int Egg_Location { get => ReadUInt16LittleEndian(Data[0x1C..]); set => WriteUInt16LittleEndian(Data[0x1C..], (ushort)value); }
-    public int Met_Location { get => ReadUInt16LittleEndian(Data[0x1E..]); set => WriteUInt16LittleEndian(Data[0x1E..], (ushort)value); }
+    public byte Ball { get => Data[0x1B]; set => Data[0x1B] = value; }
+    public ushort EggLocation { get => ReadUInt16LittleEndian(Data[0x1C..]); set => WriteUInt16LittleEndian(Data[0x1C..], value); }
+    public ushort MetLocation { get => ReadUInt16LittleEndian(Data[0x1E..]); set => WriteUInt16LittleEndian(Data[0x1E..], value); }
 
     private const int RecordStartBase = 0x20;
     internal const int COUNT_RECORD_BASE = PK9.COUNT_RECORD_BASE; // Up to 200 TM flags, but not all are used.
@@ -99,8 +99,8 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
     }
 
     public bool GetMoveRecordFlagAny() => GetMoveRecordFlagAnyBase() || GetMoveRecordFlagAnyDLC();
-    private bool GetMoveRecordFlagAnyBase() => RecordFlagsBase.IndexOfAnyExcept<byte>(0) >= 0;
-    private bool GetMoveRecordFlagAnyDLC() => RecordFlagsDLC.IndexOfAnyExcept<byte>(0) >= 0;
+    private bool GetMoveRecordFlagAnyBase() => RecordFlagsBase.ContainsAnyExcept<byte>(0);
+    private bool GetMoveRecordFlagAnyDLC() => RecordFlagsDLC.ContainsAnyExcept<byte>(0);
 
     public void ClearMoveRecordFlags()
     {
@@ -124,7 +124,7 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
         pk.TeraTypeOverride = TeraTypeOverride;
         RecordFlagsBase.CopyTo(pk.RecordFlagsBase);
         RecordFlagsDLC.CopyTo(pk.RecordFlagsDLC);
-        pk.Obedience_Level = Obedience_Level;
+        pk.ObedienceLevel = Obedience_Level;
         pk.Ability = Ability;
         pk.AbilityNumber = AbilityNumber;
     }
@@ -137,7 +137,7 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
         TeraTypeOverride = pk.TeraTypeOverride;
         pk.RecordFlagsBase.CopyTo(RecordFlagsBase);
         pk.RecordFlagsDLC.CopyTo(RecordFlagsDLC);
-        Obedience_Level = pk.Obedience_Level;
+        Obedience_Level = pk.ObedienceLevel;
         Ability = (ushort)pk.Ability;
         AbilityNumber = (byte)pk.AbilityNumber;
     }
@@ -162,7 +162,7 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
             return null;
 
         var result = CreateInternal(pkh);
-        if (result == null)
+        if (result is null)
             return null;
 
         result.PopulateFromCore(pkh);
@@ -172,7 +172,7 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
     private static GameDataPK9? CreateInternal(PKH pkh)
     {
         var side = GetNearestNeighbor(pkh);
-        if (side == null)
+        if (side is null)
             return null;
 
         var result = new GameDataPK9();
@@ -188,8 +188,8 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
     public void InitializeFrom(IGameDataSide side, PKH pkh)
     {
         Ball = side.Ball;
-        Met_Location = side.Met_Location == Locations.Default8bNone ? 0 : side.Met_Location;
-        Egg_Location = side.Egg_Location == Locations.Default8bNone ? 0 : side.Egg_Location;
+        MetLocation = side.MetLocation != Locations.Default8bNone ? side.MetLocation : (ushort)0;
+        EggLocation = side.EggLocation != Locations.Default8bNone ? side.EggLocation : (ushort)0;
 
         if (side is IScaledSize3 s3)
             Scale = s3.Scale;
@@ -205,10 +205,13 @@ public sealed class GameDataPK9 : HomeOptional1, IGameDataSide<PK9>, IScaledSize
 
     private void PopulateFromCore(PKH pkh)
     {
-        Obedience_Level = (byte)pkh.Met_Level;
+        Obedience_Level = pkh.MetLevel;
 
         var pi = PersonalTable.SV.GetFormEntry(pkh.Species, pkh.Form);
-        Ability = (ushort)pi.GetAbilityAtIndex(AbilityNumber >> 1);
+        var index = AbilityNumber >> 1;
+        if (index >= pi.AbilityCount)
+            index = 0;
+        Ability = (ushort)pi.GetAbilityAtIndex(index);
         TeraTypeOriginal = TeraTypeOverride = TeraTypeUtil.GetTeraTypeImport(pi.Type1, pi.Type2);
 
         var level = Experience.GetLevel(pkh.EXP, pi.EXPGrowth);

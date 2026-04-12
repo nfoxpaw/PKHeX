@@ -1,12 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace PKHeX.Core;
 
 /// <summary>
-/// Iterates to find potentially matched encounters for <see cref="GameVersion.BDSP"/>.
+/// Iterates to find potentially matched encounters for <see cref="EntityContext.Gen8b"/>.
 /// </summary>
 public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, GameVersion Version) : IEnumerator<MatchedEncounter<IEncounterable>>
 {
@@ -17,7 +16,7 @@ public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, Game
     private bool Yielded;
     public MatchedEncounter<IEncounterable> Current { get; private set; }
     private YieldState State;
-    private int met;
+    private ushort met;
     private bool hasOriginalLocation;
     private bool mustBeSlot;
     readonly object IEnumerator.Current => Current;
@@ -57,7 +56,6 @@ public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, Game
         switch (State)
         {
             case YieldState.Start:
-                Debug.Assert(Entity is not PK8);
                 if (Chain.Length == 0)
                     break;
 
@@ -77,20 +75,20 @@ public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, Game
                 Index = 0; goto case YieldState.Bred;
 
             case YieldState.Bred:
-                if (!Locations.IsEggLocationBred8b(Entity.Egg_Location))
+                if (!Locations.IsEggLocationBred8b(Entity.EggLocation))
                     goto case YieldState.TradeStart;
                 if (!EncounterGenerator8b.TryGetEgg(Chain, Version, out var egg))
                     goto case YieldState.TradeStart;
                 State = YieldState.BredSplit;
                 return SetCurrent(egg);
             case YieldState.BredSplit:
-                State = Entity.Egg_Location == Locations.Daycare8b ? YieldState.End : YieldState.StartCaptures;
-                if (EncounterGenerator8b.TryGetSplit((EncounterEgg)Current.Encounter, Chain, out egg))
+                State = Entity.EggLocation == Locations.Daycare8b ? YieldState.End : YieldState.StartCaptures;
+                if (EncounterGenerator8b.TryGetSplit((EncounterEgg8b)Current.Encounter, Chain, out egg))
                     return SetCurrent(egg);
                 break;
 
             case YieldState.TradeStart:
-                if (Entity.Met_Location != Locations.LinkTrade6NPC)
+                if (Entity.MetLocation != Locations.LinkTrade6NPC)
                     goto case YieldState.StartCaptures;
                 State = YieldState.Trade; goto case YieldState.Trade;
             case YieldState.Trade:
@@ -150,7 +148,7 @@ public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, Game
 
             case YieldState.Fallback:
                 State = YieldState.End;
-                if (Deferred != null)
+                if (Deferred is not null)
                     return SetCurrent(Deferred, Rating);
                 break;
         }
@@ -160,12 +158,12 @@ public record struct EncounterEnumerator8b(PKM Entity, EvoCriteria[] Chain, Game
     private void InitializeWildLocationInfo()
     {
         mustBeSlot = Entity.Ball == (byte)Ball.Safari;
-        met = Entity.Met_Location;
+        met = Entity.MetLocation;
         var location = met;
         var remap = LocationsHOME.GetRemapState(EntityContext.Gen8b, Entity.Context);
         hasOriginalLocation = true;
         if (remap.HasFlag(LocationRemapState.Remapped))
-            hasOriginalLocation = location != LocationsHOME.GetMetSWSH((ushort)location, (int)Version);
+            hasOriginalLocation = location != LocationsHOME.GetMetSWSH(location, Version);
     }
 
     private bool TryGetNext<TArea, TSlot>(TArea[] areas)

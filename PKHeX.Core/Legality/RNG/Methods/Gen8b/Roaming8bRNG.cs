@@ -7,18 +7,22 @@ namespace PKHeX.Core;
 /// Contains logic for the Generation 8b (BD/SP) roaming spawns.
 /// </summary>
 /// <remarks>
-/// Roaming encounters use the pokemon's 32-bit <see cref="PKM.EncryptionConstant"/> as RNG seed.
+/// Roaming encounters use the Pokémon's 32-bit <see cref="PKM.EncryptionConstant"/> as RNG seed.
 /// </remarks>
 public static class Roaming8bRNG
 {
     private const int UNSET = -1;
 
-    public static void ApplyDetails(PKM pk, EncounterCriteria criteria, Shiny shiny = Shiny.FixedValue, int flawless = -1, int maxAttempts = 70_000)
+    public static void ApplyDetails(PB8 pk, in EncounterCriteria criteria, Shiny shiny = Shiny.FixedValue, int flawless = -1, int maxAttempts = 70_000)
     {
         if (shiny == Shiny.FixedValue)
             shiny = criteria.Shiny is Shiny.Random or Shiny.Never ? Shiny.Never : criteria.Shiny;
         if (flawless == -1)
             flawless = 0;
+
+        // Since the inner methods do not set Gender (only fixed Genders are applicable) and Nature (assume Synchronize used), set them here.
+        pk.Gender = (byte)(pk.Species == (int)Species.Cresselia ? 1 : 2); // Mesprit
+        pk.Nature = pk.StatNature = criteria.GetNature();
 
         int ctr = 0;
         var rnd = Util.Rand;
@@ -33,7 +37,7 @@ public static class Roaming8bRNG
         TryApplyFromSeed(pk, EncounterCriteria.Unrestricted, shiny, flawless, rnd.Rand32());
     }
 
-    private static bool TryApplyFromSeed(PKM pk, EncounterCriteria criteria, Shiny shiny, int flawless, uint seed)
+    public static bool TryApplyFromSeed(PB8 pk, in EncounterCriteria criteria, Shiny shiny, int flawless, uint seed)
     {
         var xoro = new Xoroshiro128Plus8b(seed);
 
@@ -61,10 +65,12 @@ public static class Roaming8bRNG
             if (shiny == Shiny.AlwaysStar && type != Shiny.AlwaysStar)
                 return false;
         }
+        if (shiny is Shiny.Random && criteria.IsSpecifiedShiny() && !criteria.IsSatisfiedShiny(GetShinyXor(pid, pk.ID32), 16))
+            return false;
         pk.PID = pid;
 
         // Check IVs: Create flawless IVs at random indexes, then the random IVs for not flawless.
-        Span<int> ivs = stackalloc [] { UNSET, UNSET, UNSET, UNSET, UNSET, UNSET };
+        Span<int> ivs = [UNSET, UNSET, UNSET, UNSET, UNSET, UNSET];
         const int MAX = 31;
         var determined = 0;
         while (determined < flawless)
@@ -82,23 +88,22 @@ public static class Roaming8bRNG
                 ivs[i] = (int)xoro.NextUInt(MAX + 1);
         }
 
-        if (!criteria.IsIVsCompatibleSpeedLast(ivs, 8))
+        if (!criteria.IsIVsCompatibleSpeedLast(ivs))
             return false;
 
-        pk.IV_HP = ivs[0];
-        pk.IV_ATK = ivs[1];
-        pk.IV_DEF = ivs[2];
-        pk.IV_SPA = ivs[3];
-        pk.IV_SPD = ivs[4];
-        pk.IV_SPE = ivs[5];
+        pk.IV32 = (uint)ivs[0] |
+                  (uint)(ivs[1] << 05) |
+                  (uint)(ivs[2] << 10) |
+                  (uint)(ivs[5] << 15) | // speed is last in the array, but in the middle of the 32bit value
+                  (uint)(ivs[3] << 20) |
+                  (uint)(ivs[4] << 25);
 
         // Ability
         pk.RefreshAbility((int)xoro.NextUInt(2));
 
         // Remainder
-        var scale = (IScaledSize)pk;
-        scale.HeightScalar = (byte)((int)xoro.NextUInt(0x81) + (int)xoro.NextUInt(0x80));
-        scale.WeightScalar = (byte)((int)xoro.NextUInt(0x81) + (int)xoro.NextUInt(0x80));
+        pk.HeightScalar = (byte)(xoro.NextUInt(0x81) + xoro.NextUInt(0x80));
+        pk.WeightScalar = (byte)(xoro.NextUInt(0x81) + xoro.NextUInt(0x80));
 
         return true;
     }
@@ -118,7 +123,7 @@ public static class Roaming8bRNG
             return false;
 
         // Check IVs: Create flawless IVs at random indexes, then the random IVs for not flawless.
-        Span<int> ivs = stackalloc [] { UNSET, UNSET, UNSET, UNSET, UNSET, UNSET };
+        Span<int> ivs = [UNSET, UNSET, UNSET, UNSET, UNSET, UNSET];
 
         var determined = 0;
         while (determined < flawless)
@@ -176,7 +181,7 @@ public static class Roaming8bRNG
         }
 
         // Check that the nature matches
-        if (pk.Nature != (int)xoro.NextUInt(25))
+        if (pk.Nature != (Nature)xoro.NextUInt(25))
             return false;
 
         return GetIsHeightWeightMatch(pk, xoro);
@@ -188,7 +193,7 @@ public static class Roaming8bRNG
         // Assume that the gender is a match due to cute charm.
 
         // Check that the nature matches
-        if (pk.Nature != (int)xoro.NextUInt(25))
+        if (pk.Nature != (Nature)xoro.NextUInt(25))
             return false;
 
         return GetIsHeightWeightMatch(pk, xoro);
@@ -235,7 +240,7 @@ public static class Roaming8bRNG
         return s.HeightScalar == height && s.WeightScalar == weight;
     }
 
-    private static uint GetRevisedPID(uint fakeTID, uint pid, ITrainerID32 tr)
+    private static uint GetRevisedPID<T>(uint fakeTID, uint pid, T tr) where T : ITrainerID32
     {
         var xor = GetShinyXor(pid, fakeTID);
         var newXor = GetShinyXor(pid, tr.ID32);

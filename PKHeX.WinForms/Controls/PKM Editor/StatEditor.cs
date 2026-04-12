@@ -13,29 +13,39 @@ public partial class StatEditor : UserControl
     public StatEditor()
     {
         InitializeComponent();
-        MT_IVs = new[] { TB_IVHP, TB_IVATK, TB_IVDEF, TB_IVSPE, TB_IVSPA, TB_IVSPD };
-        MT_EVs = new[] { TB_EVHP, TB_EVATK, TB_EVDEF, TB_EVSPE, TB_EVSPA, TB_EVSPD };
-        MT_AVs = new[] { TB_AVHP, TB_AVATK, TB_AVDEF, TB_AVSPE, TB_AVSPA, TB_AVSPD };
-        MT_GVs = new[] { TB_GVHP, TB_GVATK, TB_GVDEF, TB_GVSPE, TB_GVSPA, TB_GVSPD };
-        MT_Stats = new[] { Stat_HP, Stat_ATK, Stat_DEF, Stat_SPE, Stat_SPA, Stat_SPD };
-        L_Stats = new[] { Label_HP, Label_ATK, Label_DEF, Label_SPE, Label_SPA, Label_SPD };
-        MT_Base = new[] { TB_BaseHP, TB_BaseATK, TB_BaseDEF, TB_BaseSPE, TB_BaseSPA, TB_BaseSPD };
+        MT_IVs = [TB_IVHP, TB_IVATK, TB_IVDEF, TB_IVSPE, TB_IVSPA, TB_IVSPD];
+        MT_EVs = [TB_EVHP, TB_EVATK, TB_EVDEF, TB_EVSPE, TB_EVSPA, TB_EVSPD];
+        MT_AVs = [TB_AVHP, TB_AVATK, TB_AVDEF, TB_AVSPE, TB_AVSPA, TB_AVSPD];
+        MT_GVs = [TB_GVHP, TB_GVATK, TB_GVDEF, TB_GVSPE, TB_GVSPA, TB_GVSPD];
+        MT_Stats = [Stat_HP, Stat_ATK, Stat_DEF, Stat_SPE, Stat_SPA, Stat_SPD];
+        L_Stats = [Label_HP, Label_ATK, Label_DEF, Label_SPE, Label_SPA, Label_SPD];
+        MT_Base = [TB_BaseHP, TB_BaseATK, TB_BaseDEF, TB_BaseSPE, TB_BaseSPA, TB_BaseSPD];
 
         TB_BST.ResetForeColor();
         TB_IVTotal.ForeColor = TB_EVTotal.ForeColor = MT_EVs[0].ForeColor;
+
+        foreach (var iv in MT_IVs)
+            iv.MouseWheel += WinFormsUtil.MouseWheelIncrement1;
+        foreach (var ev in MT_EVs)
+            ev.MouseWheel += WinFormsUtil.MouseWheelIncrement4;
+        foreach (var av in MT_AVs)
+            av.MouseWheel += WinFormsUtil.MouseWheelIncrement1;
+        foreach (var gv in MT_GVs)
+            gv.MouseWheel += WinFormsUtil.MouseWheelIncrement1;
     }
 
-    public Color EVsInvalid { get; set; } = Color.Red;
-    public Color EVsMaxed { get; set; } = Color.Honeydew;
-    public Color EVsFishy { get; set; } = Color.LightYellow;
-    public Color StatIncreased { get; set; } = Color.Red;
-    public Color StatDecreased { get; set; } = Color.Blue;
-    public Color StatHyperTrained { get; set; } = Color.LightGreen;
+    private static Color EVsInvalid => Color.Red;
+    private static Color EVsMaxed => Color.LightGreen;
+    private static Color EVsFishy => Color.Yellow;
+    private static Color StatIncreased => WinFormsUtil.ColorPlus;
+    private static Color StatDecreased => WinFormsUtil.ColorMinus;
+    private static Color StatHyperTrained => Color.LightGreen;
 
-    public IMainEditor MainEditor { private get; set; } = null!;
+    public PKMEditor MainEditor { private get; set; } = null!;
     public bool HaX { get => CHK_HackedStats.Enabled; set => CHK_HackedStats.Enabled = CHK_HackedStats.Visible = value; }
 
     private readonly ToolTip EVTip = new();
+    private StatEditorStatOrder StatOrder;
 
     public bool Valid
     {
@@ -47,7 +57,7 @@ public partial class StatEditor : UserControl
                 return true;
             if (Entity is IAwakened a)
                 return a.AwakeningAllValid();
-            return Convert.ToUInt32(TB_EVTotal.Text) <= 510;
+            return Convert.ToUInt32(TB_EVTotal.Text) <= EffortValues.Max510;
         }
     }
 
@@ -74,14 +84,14 @@ public partial class StatEditor : UserControl
 
             case Keys.Control: // Max
                 {
-                    var index = Array.IndexOf(MT_IVs, t);
+                    var index = MT_IVs.IndexOf(t);
                     t.Text = Entity.GetMaximumIV(index, true).ToString();
                     break;
                 }
 
             case Keys.Shift when Entity is IHyperTrain h: // HT
                 {
-                    var index = Array.IndexOf(MT_IVs, t);
+                    var index = MT_IVs.IndexOf(t);
                     bool flag = h.HyperTrainInvert(index);
                     UpdateHyperTrainingFlag(index, flag);
                     UpdateStats();
@@ -97,7 +107,7 @@ public partial class StatEditor : UserControl
 
         if ((ModifierKeys & Keys.Control) != 0) // Max
         {
-            int index = Array.IndexOf(MT_EVs, t);
+            int index = MT_EVs.IndexOf(t);
             int newEV = Entity.GetMaximumEV(index);
             t.Text = newEV.ToString();
         }
@@ -129,7 +139,7 @@ public partial class StatEditor : UserControl
 
         if ((ModifierKeys & Keys.Control) != 0) // Max
         {
-            int index = Array.IndexOf(MT_GVs, t);
+            int index = MT_GVs.IndexOf(t);
             var max = g.GetMax(Entity, index).ToString();
             t.Text = t.Text == max ? 0.ToString() : max;
         }
@@ -150,7 +160,7 @@ public partial class StatEditor : UserControl
                 return; // recursive on text set
             }
 
-            int index = Array.IndexOf(MT_IVs, m);
+            int index = MT_IVs.IndexOf(m);
             Entity.SetIV(index, value);
             if (Entity is IGanbaru g)
                 RefreshGanbaru(Entity, g, index);
@@ -195,7 +205,7 @@ public partial class StatEditor : UserControl
                 return; // recursive on text set
             }
 
-            int index = Array.IndexOf(MT_EVs, m);
+            int index = MT_EVs.IndexOf(m);
             Entity.SetEV(index, value);
         }
 
@@ -224,7 +234,7 @@ public partial class StatEditor : UserControl
                 return; // recursive on text set
             }
 
-            int index = Array.IndexOf(MT_AVs, m);
+            int index = MT_AVs.IndexOf(m);
             a.SetAV(index, value);
         }
 
@@ -245,7 +255,7 @@ public partial class StatEditor : UserControl
                 return; // recursive on text set
             }
 
-            int index = Array.IndexOf(MT_GVs, m);
+            int index = MT_GVs.IndexOf(m);
             g.SetGV(index, (byte)value);
             RefreshGanbaru(Entity, g, index);
         }
@@ -296,9 +306,15 @@ public partial class StatEditor : UserControl
     {
         var tb = MT_IVs[index];
         if (value)
+        {
+            tb.ForeColor = Color.Black;
             tb.BackColor = StatHyperTrained;
+        }
         else
+        {
+            tb.ResetForeColor();
             tb.ResetBackColor();
+        }
     }
 
     private void UpdateHPType(object sender, EventArgs e)
@@ -324,7 +340,7 @@ public partial class StatEditor : UserControl
         if (ModifierKeys == Keys.None)
             return;
 
-        int index = Array.IndexOf(L_Stats, sender as Label) - 1;
+        int index = L_Stats.IndexOf(sender as Label) - 1;
         if (index < 0)
             return;
 
@@ -336,7 +352,7 @@ public partial class StatEditor : UserControl
         };
 
         var newNature = request.GetNewNature(index, Entity.StatNature);
-        if (newNature == -1)
+        if (newNature == Nature.Random)
             return;
 
         MainEditor.ChangeNature(newNature);
@@ -347,7 +363,10 @@ public partial class StatEditor : UserControl
         if (Entity is not IHyperTrain h)
         {
             foreach (var iv in MT_IVs)
+            {
+                iv.ResetForeColor();
                 iv.ResetBackColor();
+            }
             return;
         }
 
@@ -366,8 +385,12 @@ public partial class StatEditor : UserControl
     private void UpdateEVTotals()
     {
         var evtotal = Entity.EVTotal;
-        TB_EVTotal.BackColor = GetEVTotalColor(evtotal, TB_IVTotal.BackColor);
         TB_EVTotal.Text = evtotal.ToString();
+        TB_EVTotal.BackColor = GetEVTotalColor(evtotal, TB_IVTotal.BackColor);
+        if (TB_EVTotal.BackColor != TB_IVTotal.BackColor)
+            TB_EVTotal.ForeColor = Color.Black;
+        else
+            TB_EVTotal.ResetForeColor();
         EVTip.SetToolTip(TB_EVTotal, $"Remaining: {510 - evtotal}");
     }
 
@@ -398,8 +421,8 @@ public partial class StatEditor : UserControl
         if (Entity is ITeraType)
         {
             var pi = Entity.PersonalInfo;
-            PB_TeraType1.SetType(pi.Type1);
-            PB_TeraType2.SetType(pi.Type2);
+            PB_TeraType1.SetType(pi.Type1, false); // Personal Info are just regular move types.
+            PB_TeraType2.SetType(pi.Type2, false); // Personal Info are just regular move types.
         }
     }
 
@@ -411,11 +434,13 @@ public partial class StatEditor : UserControl
             var value = pi.GetBaseStatValue(index);
             var s = MT_Base[index];
             s.Text = value.ToString("000");
+            s.ForeColor = Color.Black;
             s.BackColor = ColorUtil.ColorBaseStat(value);
             bst += value;
         }
 
         TB_BST.Text = bst.ToString("000");
+        TB_BST.ForeColor = Color.Black;
         TB_BST.BackColor = ColorUtil.ColorBaseStatTotal(bst);
     }
 
@@ -486,25 +511,35 @@ public partial class StatEditor : UserControl
             L_Characteristic.Text = GameInfo.Strings.characteristics[characteristic];
     }
 
-    public string UpdateNatureModification(int nature)
+    public string UpdateNatureModification(Nature nature)
     {
         // Reset Label Colors
         foreach (var l in L_Stats)
             l.ResetForeColor();
 
         // Set Colored StatLabels only if Nature isn't Neutral
-        var (up, dn) = NatureAmp.GetNatureModification(nature);
-        if (NatureAmp.IsNeutralOrInvalid(nature, up, dn))
+        var (up, dn) = nature.GetNatureModification();
+        if (nature.IsNeutralOrInvalid(up, dn))
             return "-/-";
 
         var incr = L_Stats[up + 1];
         var decr = L_Stats[dn + 1];
-        incr.ForeColor = StatIncreased;
-        decr.ForeColor = StatDecreased;
-        return $"+{incr.Text} / -{decr.Text}".Replace(":", "");
+
+        var increase = StatIncreased;
+        var decrease = StatDecreased;
+        if (Application.IsDarkModeEnabled)
+        {
+            // Slightly whiten; regular color is too dark.
+            increase = ColorUtil.Blend(increase, SystemColors.ControlText, 0.60f);
+            decrease = ColorUtil.Blend(decrease, SystemColors.ControlText, 0.45f);
+        }
+
+        incr.ForeColor = increase;
+        decr.ForeColor = decrease;
+        return $"+{incr.Text} / -{decr.Text}".Replace(":", string.Empty);
     }
 
-    public void SetATKIVGender(int gender)
+    public void SetATKIVGender(byte gender)
     {
         Entity.SetAttackIVFromGender(gender);
         TB_IVATK.Text = Entity.IV_ATK.ToString();
@@ -602,77 +637,179 @@ public partial class StatEditor : UserControl
         var max = ganbaru.GetMax(entity, i);
         var tb = MT_GVs[i];
         if (current > max)
+        {
+            tb.ForeColor = Color.Black;
             tb.BackColor = EVsInvalid;
+        }
         else if (current == max)
+        {
+            tb.ForeColor = Color.Black;
             tb.BackColor = StatHyperTrained;
+        }
         else
+        {
+            tb.ResetForeColor();
             tb.ResetBackColor();
+        }
     }
 
-    public void ToggleInterface(PKM pk, int gen)
+    private void SetStatOrder(StatEditorStatOrder order)
     {
-        FLP_StatsTotal.Visible = gen >= 3;
-        FLP_Characteristic.Visible = gen >= 3;
-        FLP_HPType.Visible = gen <= 7 || pk is PB8;
-        FLP_TeraType.Visible = FLP_TeraInner.Visible = pk is ITeraType;
-        Label_HiddenPowerPower.Visible = gen <= 5;
-        FLP_DynamaxLevel.Visible = gen == 8;
-        FLP_AlphaNoble.Visible = pk is PA8;
+        if (order == StatOrder)
+            return;
 
-        switch (gen)
+        // In Generation 1, Special Defense and Special Attack are combined.
+        // Additionally, Speed is shown before Special.
+        if (order == StatEditorStatOrder.Gen1Special)
         {
-            case 1:
-                FLP_SpD.Visible = false;
-                Label_SPA.Visible = false;
-                Label_SPC.Visible = true;
+            SetStatGridRow(3, 4); // Speed
+            SetStatGridRow(4, 5); // Special
+            SetStatVisibility(5, false);
+
+            Label_SPA.Visible = false;
+            Label_SPC.Visible = true;
+        }
+        else if (order == StatEditorStatOrder.Current)
+        {
+            SetStatGridRow(4, 4); // SpA
+            SetStatGridRow(3, 6); // Speed
+            SetStatVisibility(5, true);
+
+            Label_SPA.Visible = true;
+            Label_SPC.Visible = false;
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(order), order, null);
+        }
+
+        UpdateStatGridRowHeights();
+
+        StatOrder = order;
+    }
+
+    private float GetStatRowHeight() => TLP_StatGrid.RowStyles.Count > 1 ? TLP_StatGrid.RowStyles[1].Height : 0;
+
+    private void UpdateStatGridRowHeights()
+    {
+        var height = GetStatRowHeight();
+        for (int row = 1; row <= 6; row++) // Iterate over stat rows (1-based index)
+            TLP_StatGrid.RowStyles[row].Height = IsStatRowVisible(row) ? height : 0;
+    }
+
+    private bool IsStatRowVisible(int row)
+    {
+        for (int i = 0; i < L_Stats.Length; i++)
+        {
+            Control label = (i == 4) ? FLP_SPA : L_Stats[i];
+            if (label.Visible && TLP_StatGrid.GetRow(label) == row)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void SetStatVisibility(int statIndex, bool visible)
+    {
+        L_Stats[statIndex].Visible = visible;
+        MT_Base[statIndex].Visible = visible;
+        MT_IVs[statIndex].Visible = visible;
+        MT_EVs[statIndex].Visible = visible;
+        MT_AVs[statIndex].Visible = visible;
+        MT_GVs[statIndex].Visible = visible;
+        MT_Stats[statIndex].Visible = visible;
+    }
+
+    private void SetStatGridRow(int statIndex, int row)
+    {
+        Control stat = (statIndex == 4) ? FLP_SPA : L_Stats[statIndex];
+        TLP_StatGrid.SetRow(stat, row);
+
+        TLP_StatGrid.SetRow(MT_Base[statIndex], row);
+        TLP_StatGrid.SetRow(MT_IVs[statIndex], row);
+        TLP_StatGrid.SetRow(MT_EVs[statIndex], row);
+        TLP_StatGrid.SetRow(MT_AVs[statIndex], row);
+        TLP_StatGrid.SetRow(MT_GVs[statIndex], row);
+        TLP_StatGrid.SetRow(MT_Stats[statIndex], row);
+    }
+
+    private void SetTotalRowVisible(bool visible)
+    {
+        var total = TLP_StatGrid.RowStyles[7];
+        total.SizeType = visible ? SizeType.AutoSize : SizeType.Absolute;
+        total.Height = 0; // AutoSize will ignore the height, but Absolute needs it to be zero to hide properly.
+    }
+
+    private static void SetColumnVisible(TableLayoutPanel panel, int index, bool visible)
+    {
+        if ((uint)index >= panel.ColumnStyles.Count)
+            return;
+
+        var style = panel.ColumnStyles[index];
+        // toggle individual control visibility in column
+        foreach (Control c in panel.Controls)
+        {
+            if (panel.GetColumn(c) == index)
+                c.Visible = visible;
+        }
+        style.SizeType = !visible ? SizeType.AutoSize : SizeType.Absolute;
+    }
+
+    public void ToggleInterface(PKM pk, byte format)
+    {
+        SetTotalRowVisible(format >= 3);
+        FLP_Characteristic.Visible = format >= 3;
+        FLP_HPType.Visible = format <= 7 || pk is PB8;
+        FLP_TeraType.Visible = FLP_TeraInner.Visible = pk is ITeraType;
+        Label_HiddenPowerPower.Visible = format <= 5;
+        FLP_DynamaxLevel.Visible = format == 8;
+        FLP_AlphaNoble.Visible = pk is IAlpha;
+        CHK_IsNoble.Visible = pk is PA8;
+
+        // Update stat ordering if necessary. Gen 1 shows Speed before Special, and combines Special Attack and Special Defense into one "Special" stat.
+        // Later gens show Speed after Special, and have separate Special Attack and Special Defense stats.
+        SetStatOrder(format == 1 ? StatEditorStatOrder.Gen1Special : StatEditorStatOrder.Current);
+
+        switch (format) // EV Mask (Gen1/2 is 16-bit as opposed to 8-bit in later gens)
+        {
+            case 1 or 2:
                 TB_IVHP.Enabled = false;
                 SetEVMaskSize(Stat_HP.Size, "00000", MT_EVs);
-                break;
-            case 2:
-                FLP_SpD.Visible = true;
-                Label_SPA.Visible = true;
-                Label_SPC.Visible = false;
-                TB_IVHP.Enabled = false;
-                SetEVMaskSize(Stat_HP.Size, "00000", MT_EVs);
-                TB_EVSPD.Enabled = TB_IVSPD.Enabled = false;
                 break;
             default:
-                FLP_SpD.Visible = true;
-                Label_SPA.Visible = true;
-                Label_SPC.Visible = false;
                 TB_IVHP.Enabled = true;
                 SetEVMaskSize(TB_EVTotal.Size, "000", MT_EVs);
-                TB_EVSPD.Enabled = TB_IVSPD.Enabled = true;
                 break;
         }
 
-        var showAV = pk is IAwakened;
-        Label_AVs.Visible = TB_AVTotal.Visible = BTN_RandomAVs.Visible = showAV;
-        foreach (var mtb in MT_AVs)
-            mtb.Visible = showAV;
-        Label_EVs.Visible = TB_EVTotal.Visible = BTN_RandomEVs.Visible = !showAV;
-        foreach (var mtb in MT_EVs)
-            mtb.Visible = !showAV;
+        // Misc stat properties: toggle columns if present for object.
+        var showAVs = pk is IAwakened;
+        var showGVs = pk is IGanbaru;
+        var showEVs = !showAVs || HaX;
+        SetColumnVisible(TLP_StatGrid, 3, showEVs);
+        SetColumnVisible(TLP_StatGrid, 4, showAVs);
+        SetColumnVisible(TLP_StatGrid, 5, showGVs);
 
+        BTN_RandomEVs.Visible = showEVs;
+        BTN_RandomAVs.Visible = showAVs;
+        // no randomizing GVs; maxing/zeroing is all that is needed.
         FLP_PKMEditors.PerformLayout();
+        return;
 
-        var showGV = pk is IGanbaru;
-        Label_GVs.Visible = showGV;
-        foreach (var mtb in MT_GVs)
-            mtb.Visible = showGV;
-
-        static void SetEVMaskSize(Size s, string Mask, MaskedTextBox[] arr)
+        static void SetEVMaskSize(Size s, string mask, ReadOnlySpan<MaskedTextBox> arr)
         {
             foreach (var ctrl in arr)
             {
                 ctrl.Size = s;
-                ctrl.Mask = Mask;
+                ctrl.Mask = mask;
             }
         }
     }
 
     private const string TeraOverrideNone = "---";
     private const byte TeraOverrideNoneValue = TeraTypeUtil.OverrideNone;
+    private const byte TeraStellarValue = TeraTypeUtil.Stellar;
+    private const byte TeraDisplayIndex = TeraTypeUtil.StellarTypeDisplayStringIndex;
 
     private void L_TeraTypeOriginal_Click(object sender, EventArgs e)
     {
@@ -705,13 +842,14 @@ public partial class StatEditor : UserControl
         CB_TeraTypeOriginal.InitializeBinding();
         CB_TeraTypeOverride.InitializeBinding();
 
-        var types = GameInfo.Strings.types;
-        CB_HPType.DataSource = Util.GetCBList(types.AsSpan(1, 16));
+        var types = GameInfo.Strings.types.AsSpan();
+        CB_HPType.DataSource = Util.GetCBList(types.Slice(1, HiddenPower.TypeCount));
 
-        var tera = Util.GetCBList(types);
+        var tera = Util.GetCBList(types[..TeraDisplayIndex]);
         tera.Insert(0, new(TeraOverrideNone, TeraOverrideNoneValue));
-        CB_TeraTypeOriginal.DataSource = new BindingSource(tera, null);
-        CB_TeraTypeOverride.DataSource = new BindingSource(tera, null);
+        tera.Add(new(types[TeraDisplayIndex], TeraStellarValue));
+        CB_TeraTypeOriginal.DataSource = new BindingSource(tera, string.Empty);
+        CB_TeraTypeOverride.DataSource = new BindingSource(tera, string.Empty);
 
         ChangingFields = false;
     }
@@ -719,16 +857,16 @@ public partial class StatEditor : UserControl
     private void CHK_Gigantamax_CheckedChanged(object sender, EventArgs e)
     {
         if (!ChangingFields)
-            ((PKMEditor)MainEditor).UpdateSprite();
+            MainEditor.UpdateSprite();
     }
 
     private void CHK_IsAlpha_CheckedChanged(object sender, EventArgs e)
     {
         if (!ChangingFields)
-            ((PKMEditor)MainEditor).UpdateSprite();
+            MainEditor.UpdateSprite();
     }
 
-    private void L_TeraTypeOverride_Click(object sender, EventArgs e) => CB_TeraTypeOverride.SelectedValue = Entity.SV ? (int)TeraOverrideNoneValue : CB_TeraTypeOriginal.SelectedValue;
+    private void L_TeraTypeOverride_Click(object sender, EventArgs e) => CB_TeraTypeOverride.SelectedValue = Entity.SV ? (int)TeraOverrideNoneValue : CB_TeraTypeOriginal.SelectedValue!;
 
     private void ChangeTeraType(object sender, EventArgs e)
     {
@@ -750,7 +888,7 @@ public partial class StatEditor : UserControl
             type = original;
         PB_TeraType.Image = TypeSpriteUtil.GetTypeSpriteGem(type);
         if (!ChangingFields)
-            ((PKMEditor)MainEditor).UpdateSprite();
+            MainEditor.UpdateSprite();
     }
 
     public void CenterSubEditors()
@@ -763,14 +901,39 @@ public sealed class TypePictureBox : PictureBox
 {
     private byte Type;
 
-    public void SetType(byte type) => BackColor = TypeColor.GetTypeSpriteColor(Type = type);
+    public void SetType(byte type, bool tera) => BackColor = tera
+        ? TypeColor.GetTeraSpriteColor(Type = type)
+        : TypeColor.GetTypeSpriteColor(Type = type);
+
     private readonly ToolTip Tip = new() { InitialDelay = 500, ReshowDelay = 500, ShowAlways = true };
 
     // Show a tooltip when hovered.
     protected override void OnMouseHover(EventArgs e)
     {
         base.OnMouseHover(e);
-        var name = GameInfo.Strings.types[Type];
+        var index = Type;
+        if (index == TeraTypeUtil.Stellar)
+            index = TeraTypeUtil.StellarTypeDisplayStringIndex;
+        var name = GameInfo.Strings.types[index];
         Tip.SetToolTip(this, name);
     }
+}
+
+/// <summary>
+/// Stat display order for a stat editor.
+/// </summary>
+public enum StatEditorStatOrder
+{
+    /// <summary>
+    /// Stat order for everything after Generation 1.
+    /// </summary>
+    /// <remarks>
+    /// Default load state for a GUI.
+    /// </remarks>
+    Current = 0,
+
+    /// <summary>
+    /// Stat order for Generation 1; Speed before Special.
+    /// </summary>
+    Gen1Special,
 }

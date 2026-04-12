@@ -5,12 +5,8 @@ namespace PKHeX.Core;
 /// <summary>
 /// Pokédex structure used for <see cref="GameVersion.SV"/>.
 /// </summary>>
-public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
+public sealed class Zukan9Kitakami(SAV9SV sav, SCBlock Block) : ZukanBase<SAV9SV>(sav, default)
 {
-    private readonly SCBlock Block;
-
-    public Zukan9Kitakami(SAV9SV sav, SCBlock block) : base(sav, 0) => Block = block;
-
     public PokeDexEntry9Kitakami Get(ushort species)
     {
         if (species > SAV.MaxSpeciesID)
@@ -18,7 +14,7 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
 
         const int size = PokeDexEntry9Kitakami.SIZE;
         var internalSpecies = SpeciesConverter.GetInternal9(species);
-        var span = Block.Data.AsSpan(internalSpecies * size, size);
+        var span = Block.Data.Slice(internalSpecies * size, size);
         return new PokeDexEntry9Kitakami(span);
     }
 
@@ -98,10 +94,7 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
         return (0, 0);
     }
 
-    public override void SeenNone()
-    {
-        Array.Clear(Block.Data, 0, Block.Data.Length);
-    }
+    public override void SeenNone() => Block.Data.Clear();
 
     public override void CaughtNone()
     {
@@ -122,7 +115,9 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
         // Wipe existing gender flags.
         var entry = Get(species);
         entry.FlagsGenderSeen = 0;
-        entry.FlagsShinySeen = (byte)(value ? shinyToo ? 3 : 1 : 0);
+        entry.SetIsModelSeen(false, true); // should always be bit0=1
+        if (!value || shinyToo)
+            entry.SetIsModelSeen(true, value);
 
         var pt = SAV.Personal;
         for (byte form = 0; form < formCount; form++)
@@ -150,7 +145,7 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
         }
         else
         {
-            var displayGender = (byte)pi.FixedGender();
+            var displayGender = pi.FixedGender();
             entry.SetIsGenderSeen(displayGender, true);
         }
 
@@ -198,7 +193,7 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
                     continue;
                 SetSeen(entry, pi, form, true, shinyToo);
                 entry.SetObtainedForm(form, true);
-                entry.SetLocalStates(pi, form, (byte)pi.RandomGender(), shinyToo);
+                entry.SetLocalStates(pi, form, pi.RandomGender(), shinyToo);
             }
             entry.SetAllLanguageFlags();
         }
@@ -248,7 +243,7 @@ public sealed class Zukan9Kitakami : ZukanBase<SAV9SV>
 
         SetSeen(entry, pi, form, true, isShiny);
         entry.SetObtainedForm(form, true);
-        entry.SetLocalStates(pi, form, (byte)pi.RandomGender(), isShiny);
+        entry.SetLocalStates(pi, form, pi.RandomGender(), isShiny);
         if (isShiny)
             entry.SetIsModelSeen(true, true);
         entry.SetLanguageFlag(pk.Language, true);

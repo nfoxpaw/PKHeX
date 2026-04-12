@@ -1,3 +1,5 @@
+using static PKHeX.Core.RandomCorrelationRating;
+
 namespace PKHeX.Core;
 
 /// <summary>
@@ -6,23 +8,22 @@ namespace PKHeX.Core;
 public sealed record EncounterSlot3XD(EncounterArea3XD Parent, ushort Species, byte LevelMin, byte LevelMax, byte SlotNumber)
     : IEncounterable, IEncounterMatch, IEncounterConvertible<XK3>, INumberedSlot, IFatefulEncounterReadOnly, IRandomCorrelation
 {
-    public int Generation => 3;
+    public byte Generation => 3;
     public EntityContext Context => EntityContext.Gen3;
     public bool FatefulEncounter => true;
-    public bool EggEncounter => false;
+    public bool IsEgg => false;
     public Ball FixedBall => Ball.None;
     public AbilityPermission Ability => AbilityPermission.Any12;
     public Shiny Shiny => Shiny.Random;
     public bool IsShiny => false;
-    public int EggLocation => 0;
+    public ushort EggLocation => 0;
 
     public byte Form => 0;
 
     public string Name => $"Wild Encounter ({Version})";
-    public string LongName => $"{Name} {Type.ToString().Replace('_', ' ')}";
+    public string LongName => $"{Name} - {Parent.Type} Spot";
     public GameVersion Version => Parent.Version;
-    public int Location => Parent.Location;
-    public SlotType Type => Parent.Type;
+    public ushort Location => Parent.Location;
 
     #region Generating
     PKM IEncounterConvertible.ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria) => ConvertToPKM(tr, criteria);
@@ -31,39 +32,39 @@ public sealed record EncounterSlot3XD(EncounterArea3XD Parent, ushort Species, b
 
     public XK3 ConvertToPKM(ITrainerInfo tr, EncounterCriteria criteria)
     {
-        int lang = (int)Language.GetSafeLanguage(Generation, (LanguageID)tr.Language);
+        int language = (int)Language.GetSafeLanguage3((LanguageID)tr.Language);
         var pi = PersonalTable.E[Species];
         var pk = new XK3
         {
             Species = Species,
             CurrentLevel = LevelMin,
-            OT_Friendship = pi.BaseFriendship,
+            OriginalTrainerFriendship = pi.BaseFriendship,
             FatefulEncounter = FatefulEncounter,
-            Met_Location = Location,
-            Met_Level = LevelMin,
-            Version = (byte)GameVersion.CXD,
+            MetLocation = Location,
+            MetLevel = LevelMin,
+            Version = GameVersion.CXD,
             Ball = (byte)Ball.Poke,
 
-            Language = lang,
-            OT_Name = tr.OT,
-            OT_Gender = 0,
+            Language = language,
+            OriginalTrainerName = tr.OT,
+            OriginalTrainerGender = 0,
             ID32 = tr.ID32,
-            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, lang, Generation),
+            Nickname = SpeciesName.GetSpeciesNameGeneration(Species, language, Generation),
         };
 
         SetPINGA(pk, criteria, pi);
-        EncounterUtil1.SetEncounterMoves(pk, GameVersion.XD, LevelMin);
+        EncounterUtil.SetEncounterMoves(pk, GameVersion.E, LevelMin);
 
         pk.ResetPartyStats();
         return pk;
     }
 
-    private void SetPINGA(XK3 pk, EncounterCriteria criteria, PersonalInfo3 pi)
+    private void SetPINGA(XK3 pk, in EncounterCriteria criteria, PersonalInfo3 pi)
     {
-        int gender = criteria.GetGender(pi);
-        int nature = (int)criteria.GetNature();
-        int ability = criteria.GetAbilityFromNumber(Ability);
-        PIDGenerator.SetRandomPokeSpotPID(pk, nature, gender, ability, SlotNumber);
+        MethodPokeSpot.SetRandomPID(pk, criteria, pi.Gender, SlotNumber);
+        if (criteria.IsSpecifiedIVsAll() && !MethodPokeSpot.TrySetIVs(pk, criteria, LevelMin, LevelMax))
+            return;
+        MethodPokeSpot.SetRandomIVs(pk, criteria, LevelMin, LevelMax, Util.Rand32());
     }
 
     #endregion
@@ -73,6 +74,6 @@ public sealed record EncounterSlot3XD(EncounterArea3XD Parent, ushort Species, b
     public EncounterMatchRating GetMatchRating(PKM pk) => EncounterMatchRating.Match;
     #endregion
 
-    public bool IsCompatible(PIDType val, PKM pk) => val == PIDType.PokeSpot;
+    public RandomCorrelationRating IsCompatible(PIDType type, PKM pk) => type is PIDType.PokeSpot ? Match : Mismatch;
     public PIDType GetSuggestedCorrelation() => PIDType.PokeSpot;
 }

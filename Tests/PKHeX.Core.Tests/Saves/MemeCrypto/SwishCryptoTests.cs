@@ -14,7 +14,7 @@ public class SwishCryptoTests
     [Fact]
     public void CanMakeBlankSAV8()
     {
-        var sav = SaveUtil.GetBlankSAV(GameVersion.SW, "PKHeX");
+        var sav = BlankSaveFile.Get(SaveFileType.SWSH, GameVersion.SW);
         sav.Should().NotBeNull();
     }
 }

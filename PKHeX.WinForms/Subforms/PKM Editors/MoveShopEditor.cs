@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.Drawing;
 using System.Windows.Forms;
 using PKHeX.Core;
 using PKHeX.Drawing.Misc;
@@ -150,16 +149,16 @@ public partial class MoveShopEditor : Form
             if (isValid)
             {
                 var cell = row.Cells[ColumnPurchased];
-                cell.Style.BackColor = cell.Style.SelectionBackColor = Color.LightGreen;
+                cell.Style.BackColor = cell.Style.SelectionBackColor = WinFormsUtil.ColorValid;
             }
             else
             {
                 var cell = row.Cells[ColumnPurchased];
-                cell.Style.SelectionBackColor = Color.Red;
+                cell.Style.SelectionBackColor = WinFormsUtil.ColorWarn;
             }
             row.Cells[ColumnIndex].Value = $"{i + Bias:00}";
             row.Cells[ColumnType].Value = type.ToString("00") + (isValid ? 0 : 1) + names[move]; // type -> valid -> name sorting
-            row.Cells[ColumnTypeIcon].Value = TypeSpriteUtil.GetTypeSpriteIcon(type);
+            row.Cells[ColumnTypeIcon].Value = TypeSpriteUtil.GetTypeSpriteIconSmall(type);
             row.Cells[ColumnName].Value = names[indexes[i]];
         }
     }
@@ -177,7 +176,7 @@ public partial class MoveShopEditor : Form
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             var row = dgv.Rows[i];
-            var index = int.Parse((string)row.Cells[ColumnIndex].Value) - Bias;
+            var index = int.Parse((string)row.Cells[ColumnIndex].Value!) - Bias;
             var purchased = row.Cells[ColumnPurchased];
             var mastered = row.Cells[ColumnMastered];
             purchased.Value = Shop.GetPurchasedRecordFlag(index);
@@ -190,11 +189,11 @@ public partial class MoveShopEditor : Form
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             var row = dgv.Rows[i];
-            var index = int.Parse((string)row.Cells[ColumnIndex].Value) - Bias;
+            var index = int.Parse((string)row.Cells[ColumnIndex].Value!) - Bias;
             var purchased = row.Cells[ColumnPurchased];
             var mastered = row.Cells[ColumnMastered];
-            Shop.SetPurchasedRecordFlag(index, (bool)purchased.Value);
-            Master.SetMasteredRecordFlag(index, (bool)mastered.Value);
+            Shop.SetPurchasedRecordFlag(index, (bool)purchased.Value!);
+            Master.SetMasteredRecordFlag(index, (bool)mastered.Value!);
         }
     }
 
